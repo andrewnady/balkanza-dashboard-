@@ -5,6 +5,8 @@ import { useMetrics, Segmented, SectionHead, CardSkeleton, ErrorNote, StatTile, 
 import { HBars, TrendArea } from "../ui/charts";
 
 const RANGES = [
+  { label: "Today", value: 1 },
+  { label: "7d", value: 7 },
   { label: "14d", value: 14 },
   { label: "30d", value: 30 },
   { label: "90d", value: 90 },

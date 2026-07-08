@@ -5,9 +5,21 @@ import { useMetrics, Segmented, SectionHead, CardSkeleton, ErrorNote, StatTile, 
 import { TrendArea } from "../ui/charts";
 
 const RANGES = [
+  { label: "Today", value: 1 },
+  { label: "7 days", value: 7 },
+  { label: "14 days", value: 14 },
   { label: "30 days", value: 30 },
   { label: "90 days", value: 90 },
 ];
+
+// fixed colours per revenue type (categorical palette)
+const TYPE_COLORS: Record<string, string> = {
+  Subscriptions: "var(--series-1)",
+  Renewals: "var(--series-5)",
+  Roses: "var(--series-7)",
+  "Super Likes": "var(--series-2)",
+  Boosts: "var(--series-3)",
+};
 
 export default function Monetization() {
   const [days, setDays] = useState<number>(30);
@@ -34,59 +46,71 @@ export default function Monetization() {
             <div className="callout crit" style={{ marginBottom: 16 }}>
               <span className="callout-icon">🚨</span>
               <div>
-                <strong>Payment health warning:</strong> {fmtPct(data.payments.failRate)} of subscription payments in the last {days} days are
-                recorded as not <code>paid</code> ({data.payments.failed} of {data.payments.total}). Verify whether payments are genuinely
-                failing or the status value differs from <code>paid</code>.
+                <strong>Payment health warning:</strong> {fmtPct(data.payments.failRate)} of subscription payments in this window failed
+                ({data.payments.failed} of {data.payments.total}).
               </div>
             </div>
           )}
 
           <div className="grid grid-3" style={{ marginBottom: 16 }}>
-            <div className="card">
-              <p className="card-title">Revenue trend</p>
-              <p className="card-note">Paid one-time purchases per day.</p>
+            <div className="card col-span-2">
+              <p className="card-title">Revenue trend — all sources</p>
+              <p className="card-note">
+                Subscriptions, renewals, roses, super likes &amp; boosts per day · total {fmtMoney(data.totalRevenue)} this window.
+              </p>
               <TrendArea data={data.revenueTrend} xKey="date" yKey="revenue" color="var(--series-4)" valueFmt={fmtMoney} height={190} />
             </div>
-            <StatTile
-              label="Subscription payment success"
-              value={data.payments.total ? 100 - data.payments.failRate : 0}
-              sub={`${data.payments.succeeded}/${data.payments.total} succeeded`}
-              format="pct"
-            />
-            <StatTile
-              label="Best offer claim rate"
-              value={data.offers.length ? Math.max(...data.offers.map((o: any) => o.claimRate)) : 0}
-              sub={data.offers[0] ? `${data.offers[0].name}` : "no offers"}
-              format="pct"
-            />
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <StatTile label="Total revenue" value={data.totalRevenue} sub={`${days === 1 ? "today" : `last ${days} days`}`} format="money" />
+              <StatTile
+                label="Subscription payment success"
+                value={data.payments.total ? 100 - data.payments.failRate : 0}
+                sub={`${data.payments.succeeded}/${data.payments.total} succeeded`}
+                format="pct"
+              />
+            </div>
           </div>
 
           <div className="grid grid-2">
             <div className="card">
-              <p className="card-title">Revenue by service ({days}d)</p>
-              {data.services.length === 0 ? (
-                <p className="muted" style={{ fontSize: 13 }}>No paid one-time purchases in this window.</p>
+              <p className="card-title">Revenue by service ({days === 1 ? "today" : `${days}d`})</p>
+              <p className="card-note">Subscriptions, renewals, roses, super likes &amp; boosts.</p>
+              {data.revenueByType.length === 0 ? (
+                <p className="muted" style={{ fontSize: 13 }}>No revenue in this window.</p>
               ) : (
                 <div className="tbl-scroll">
                   <table className="tbl">
                     <thead>
                       <tr>
-                        <th>Service</th>
-                        <th className="num">Purchases</th>
-                        <th className="num">Units</th>
+                        <th>Type</th>
+                        <th className="num">Transactions</th>
                         <th className="num">Revenue</th>
+                        <th className="num">% of total</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {data.services.map((s: any) => (
-                        <tr key={s.service}>
-                          <td style={{ fontWeight: 600 }}>{s.service}</td>
-                          <td className="num">{fmtInt(s.purchases)}</td>
-                          <td className="num">{fmtInt(s.units)}</td>
+                      {data.revenueByType.map((s: any) => (
+                        <tr key={s.type}>
+                          <td style={{ fontWeight: 600 }}>
+                            <span className="dot" style={{ background: TYPE_COLORS[s.type] || "var(--series-8)" }} />
+                            {s.type}
+                          </td>
+                          <td className="num">{fmtInt(s.transactions)}</td>
                           <td className="num">{fmtMoney(s.revenue)}</td>
+                          <td className="num muted">{fmtPct(data.totalRevenue ? (100 * s.revenue) / data.totalRevenue : 0)}</td>
                         </tr>
                       ))}
                     </tbody>
+                    <tfoot>
+                      <tr>
+                        <td style={{ fontWeight: 700, borderTop: "1px solid var(--border)" }}>Total</td>
+                        <td className="num" style={{ fontWeight: 700, borderTop: "1px solid var(--border)" }}>
+                          {fmtInt(data.revenueByType.reduce((a: number, r: any) => a + r.transactions, 0))}
+                        </td>
+                        <td className="num" style={{ fontWeight: 700, borderTop: "1px solid var(--border)" }}>{fmtMoney(data.totalRevenue)}</td>
+                        <td className="num muted" style={{ borderTop: "1px solid var(--border)" }}>100%</td>
+                      </tr>
+                    </tfoot>
                   </table>
                 </div>
               )}

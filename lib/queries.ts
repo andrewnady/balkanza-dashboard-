@@ -257,13 +257,36 @@ export async function getLiquidity(minUsersIn: unknown, limitIn: unknown, gender
 /* MONETIZATION — revenue, plans, conversion, offers, payment health   */
 /* ------------------------------------------------------------------ */
 export async function getMonetization(daysIn: unknown) {
-  const days = clampDays(daysIn, [30, 90], 30);
+  const days = clampDays(daysIn, [1, 7, 14, 30, 90], 30);
+  const d1 = days - 1; // window start offset so days=1 means just today
 
-  const [services, plans, offers, payments, revTrend] = await Promise.all([
-    sql`SELECT ots.name AS service, COUNT(*) AS purchases, COALESCE(SUM(pu.amount),0) AS revenue, COALESCE(SUM(pu.quantity),0) AS units
-        FROM purchases pu JOIN one_time_services ots ON ots.id = pu.service_id
-        WHERE pu.payment_status = 'paid' AND pu.created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${days})
-        GROUP BY ots.name ORDER BY revenue DESC NULLS LAST`,
+  // Unified revenue: subscription payments (first-per-subscription = new, later = renewal)
+  // + one-time purchases split by service type. The txns CTE is repeated inline in the
+  // two queries below so each can stay a single parameterised tagged template.
+  const [byType, trend, plans, offers, payments] = await Promise.all([
+    sql`WITH txns AS (
+          SELECT sp.created_at, CASE WHEN sp.rn = 1 THEN 'Subscriptions' ELSE 'Renewals' END AS type, sp.amount
+          FROM (SELECT created_at, amount, ROW_NUMBER() OVER (PARTITION BY subscription_id ORDER BY created_at) AS rn
+                FROM subscription_payments WHERE status = 'succeeded') sp
+          UNION ALL
+          SELECT pu.created_at,
+                 CASE ots.service_type WHEN 'message' THEN 'Roses' WHEN 'super_like' THEN 'Super Likes'
+                      WHEN 'profile_boost' THEN 'Boosts' ELSE ots.name END AS type, pu.amount
+          FROM purchases pu JOIN one_time_services ots ON ots.id = pu.service_id WHERE pu.payment_status = 'paid'
+        )
+        SELECT type, COUNT(*) AS transactions, COALESCE(SUM(amount),0) AS revenue
+        FROM txns WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d1})
+        GROUP BY type ORDER BY revenue DESC`,
+    sql`WITH txns AS (
+          SELECT sp.created_at, sp.amount
+          FROM (SELECT created_at, amount FROM subscription_payments WHERE status = 'succeeded') sp
+          UNION ALL
+          SELECT pu.created_at, pu.amount
+          FROM purchases pu WHERE pu.payment_status = 'paid'
+        )
+        SELECT created_at::date AS date, COALESCE(SUM(amount),0) AS revenue
+        FROM txns WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d1})
+        GROUP BY created_at::date ORDER BY date`,
     sql`SELECT sp.display_name, sp.price, sp.duration, COUNT(*) FILTER (WHERE us.status = 'active') AS active_subs
         FROM user_subscriptions us JOIN subscription_plans sp ON sp.id = us.plan_id
         GROUP BY sp.display_name, sp.price, sp.duration
@@ -273,22 +296,23 @@ export async function getMonetization(daysIn: unknown) {
           ROUND(100.0 * COUNT(*) FILTER (WHERE uoi.status='claimed') / NULLIF(COUNT(*),0),1) AS claim_rate
         FROM user_offer_impressions uoi JOIN offers o ON o.id = uoi.offer_id
         GROUP BY o.name ORDER BY impressions DESC`,
-    sql`SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE status = 'paid') AS succeeded,
-          COUNT(*) FILTER (WHERE status <> 'paid') AS failed
-        FROM subscription_payments WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${days})`,
-    sql`SELECT created_at::date AS date, COALESCE(SUM(amount),0) AS revenue
-        FROM purchases WHERE payment_status = 'paid' AND created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${days})
-        GROUP BY created_at::date ORDER BY date`,
+    // NOTE: in subscription_payments the success value is 'succeeded' (not 'paid').
+    sql`SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE status = 'succeeded') AS succeeded,
+          COUNT(*) FILTER (WHERE status <> 'succeeded') AS failed
+        FROM subscription_payments WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d1})`,
   ]);
 
   const pay = payments[0];
+  const revenueByType = byType.map((r) => ({ type: r.type as string, transactions: num(r.transactions), revenue: num(r.revenue) }));
+  const totalRevenue = revenueByType.reduce((s, r) => s + r.revenue, 0);
   return {
     days,
-    services: services.map((r) => ({ service: r.service as string, purchases: num(r.purchases), revenue: num(r.revenue), units: num(r.units) })),
+    revenueByType,
+    totalRevenue,
+    revenueTrend: trend.map((r) => ({ date: String(r.date).slice(0, 10), revenue: num(r.revenue) })),
     plans: plans.map((r) => ({ name: r.display_name as string, price: num(r.price), duration: (r.duration as string) || "", active: num(r.active_subs) })),
     offers: offers.map((r) => ({ name: r.name as string, impressions: num(r.impressions), claimed: num(r.claimed), claimRate: num(r.claim_rate) })),
     payments: { total: num(pay.total), succeeded: num(pay.succeeded), failed: num(pay.failed), failRate: num(pay.total) ? Math.round((1000 * num(pay.failed)) / num(pay.total)) / 10 : 0 },
-    revenueTrend: revTrend.map((r) => ({ date: String(r.date).slice(0, 10), revenue: num(r.revenue) })),
   };
 }
 
@@ -296,7 +320,8 @@ export async function getMonetization(daysIn: unknown) {
 /* TRUST & SAFETY — verification, data quality, spam signals           */
 /* ------------------------------------------------------------------ */
 export async function getSafety(daysIn: unknown) {
-  const days = clampDays(daysIn, [14, 30, 90], 14);
+  const days = clampDays(daysIn, [1, 7, 14, 30, 90], 14);
+  const d1 = days - 1; // window start offset so days=1 means just today
 
   const [verification, quality, zeroPhotos, spam, reports, dupBios, ipMulti] = await Promise.all([
     sql`SELECT verification_status AS status, COUNT(*) AS users FROM users
@@ -312,7 +337,7 @@ export async function getSafety(daysIn: unknown) {
     sql`SELECT COUNT(*) AS n FROM profiles p JOIN users u ON u.id = p.user_id AND u.is_disabled = false
         WHERE p.bio ~* '(whats\\s?app|telegram|viber|instagram|snapchat|@[a-z0-9_]+|\\+?\\d[\\d \\-]{7,}\\d)'`,
     sql`SELECT created_at::date AS date, COUNT(*) AS reports FROM profile_reports
-        WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${days}) GROUP BY created_at::date ORDER BY date`,
+        WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d1}) GROUP BY created_at::date ORDER BY date`,
     sql`SELECT p.bio, COUNT(*) AS num FROM profiles p JOIN users u ON u.id = p.user_id AND u.is_disabled = false
         WHERE p.bio IS NOT NULL AND LENGTH(TRIM(p.bio)) > 15 GROUP BY p.bio HAVING COUNT(*) > 1 ORDER BY num DESC LIMIT 10`,
     sql`SELECT il.ip_address, COUNT(DISTINCT il.user_id) AS accounts FROM ip_logs il
