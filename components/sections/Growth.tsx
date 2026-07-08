@@ -5,6 +5,8 @@ import { useMetrics, Segmented, SectionHead, CardSkeleton, ErrorNote, fmtInt } f
 import { TrendArea, HBars, SERIES } from "../ui/charts";
 
 const RANGES = [
+  { label: "Today", value: 1 },
+  { label: "7d", value: 7 },
   { label: "14d", value: 14 },
   { label: "30d", value: 30 },
   { label: "90d", value: 90 },
@@ -27,7 +29,7 @@ export default function Growth() {
         <div className="grid grid-3">
           <div className="card col-span-2">
             <p className="card-title">Sign-ups per day</p>
-            <p className="card-note">New non-admin registrations, last {days} days.</p>
+            <p className="card-note">New non-admin registrations, {days === 1 ? "today" : `last ${days} days`}.</p>
             {loading || !data ? <CardSkeleton height={220} /> : <TrendArea data={data.trend} xKey="date" yKey="signups" valueFmt={fmtInt} />}
           </div>
           <div className="card">

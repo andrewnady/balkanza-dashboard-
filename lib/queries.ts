@@ -71,16 +71,17 @@ export async function getOverview(daysIn: unknown) {
 /* GROWTH — daily sign-up trend + source mix                          */
 /* ------------------------------------------------------------------ */
 export async function getGrowth(daysIn: unknown) {
-  const days = clampDays(daysIn, [14, 30, 90]);
+  const days = clampDays(daysIn, [1, 7, 14, 30, 90]);
+  const d1 = days - 1; // window start offset so days=1 means just today
 
   const [trend, sources] = await Promise.all([
     sql`SELECT created_at::date AS date, COUNT(*) AS signups
         FROM users
-        WHERE is_admin = false AND created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${days})
+        WHERE is_admin = false AND created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d1})
         GROUP BY created_at::date ORDER BY date`,
     sql`SELECT COALESCE(register_source::text, 'unknown') AS source, COUNT(*) AS signups
         FROM users
-        WHERE is_admin = false AND created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${days})
+        WHERE is_admin = false AND created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d1})
         GROUP BY 1 ORDER BY signups DESC`,
   ]);
 
