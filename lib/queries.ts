@@ -327,11 +327,21 @@ export async function getSafety(params: PeriodInput) {
           AND p.bio ~* '(whats\\s?app|telegram|viber|instagram|snapchat|@[a-z0-9_]+|\\+?\\d[\\d \\-]{7,}\\d)'`,
     sql`SELECT created_at::date AS date, COUNT(*) AS reports FROM profile_reports
         WHERE created_at >= ${p.start}::date AND created_at < ${p.endEx}::date GROUP BY created_at::date ORDER BY date`,
-    sql`SELECT p.bio, COUNT(*) AS num FROM profiles p JOIN users u ON u.id = p.user_id AND u.is_disabled = false
+    sql`SELECT p.bio, COUNT(*) AS num,
+          json_agg(DISTINCT jsonb_build_object(
+            'id', u.id,
+            'name', NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), ''),
+            'email', u.email)) AS members
+        FROM profiles p JOIN users u ON u.id = p.user_id AND u.is_disabled = false
         WHERE p.bio IS NOT NULL AND LENGTH(TRIM(p.bio)) > 15
           AND p.created_at >= ${p.start}::date AND p.created_at < ${p.endEx}::date
         GROUP BY p.bio HAVING COUNT(*) > 1 ORDER BY num DESC LIMIT 10`,
-    sql`SELECT il.ip_address, COUNT(DISTINCT il.user_id) AS accounts FROM ip_logs il
+    sql`SELECT il.ip_address, COUNT(DISTINCT il.user_id) AS accounts,
+          json_agg(DISTINCT jsonb_build_object(
+            'id', u.id,
+            'name', NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), ''),
+            'email', u.email)) AS members
+        FROM ip_logs il JOIN users u ON u.id = il.user_id
         WHERE il.created_at >= ${p.start}::date AND il.created_at < ${p.endEx}::date
         GROUP BY il.ip_address HAVING COUNT(DISTINCT il.user_id) >= 3 ORDER BY accounts DESC LIMIT 10`,
   ]);
@@ -350,7 +360,7 @@ export async function getSafety(params: PeriodInput) {
     zeroPhotos: num(zeroPhotos[0].n),
     spamBios: num(spam[0].n),
     reports: reports.map((r) => ({ date: String(r.date).slice(0, 10), reports: num(r.reports) })),
-    duplicateBios: dupBios.map((r) => ({ bio: r.bio as string, num: num(r.num) })),
-    ipClusters: ipMulti.map((r) => ({ ip: r.ip_address as string, accounts: num(r.accounts) })),
+    duplicateBios: dupBios.map((r) => ({ bio: r.bio as string, num: num(r.num), members: (r.members as any[]) || [] })),
+    ipClusters: ipMulti.map((r) => ({ ip: r.ip_address as string, accounts: num(r.accounts), members: (r.members as any[]) || [] })),
   };
 }

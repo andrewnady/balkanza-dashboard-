@@ -19,6 +19,26 @@ const VERIF_COLORS: Record<string, string> = {
   rejected: "var(--series-6)",
 };
 
+// Where a flagged account links to. Override with NEXT_PUBLIC_PROFILE_URL_TEMPLATE
+// (must contain "{id}") if your admin uses a different path.
+const PROFILE_URL = process.env.NEXT_PUBLIC_PROFILE_URL_TEMPLATE || "https://balkanza.com/admin/users/{id}";
+const profileUrl = (id: string) => PROFILE_URL.replace("{id}", encodeURIComponent(id));
+
+function MemberList({ members }: { members: { id: string; name: string | null; email: string | null }[] }) {
+  return (
+    <ul className="member-list">
+      {members.map((m) => (
+        <li key={m.id}>
+          <a href={profileUrl(m.id)} target="_blank" rel="noreferrer">
+            {m.name || m.email || m.id} ↗
+          </a>
+          {m.name && m.email && <span className="muted"> · {m.email}</span>}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export default function Safety() {
   const [period, setPeriod] = useState<PeriodValue>({ range: "all" });
   const { data, error, loading } = useMetrics<any>("safety", period);
@@ -95,24 +115,38 @@ export default function Safety() {
                 </div>
               </div>
               {data.ipClusters.length > 0 && (
-                <div className="tbl-scroll">
-                  <table className="tbl">
-                    <thead>
-                      <tr>
-                        <th>IP address</th>
-                        <th className="num">Accounts</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.ipClusters.slice(0, 5).map((c: any) => (
-                        <tr key={c.ip}>
-                          <td className="mono">{c.ip}</td>
-                          <td className="num">{c.accounts}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <>
+                  <p className="cluster-head-label">Shared-IP clusters · click to see accounts</p>
+                  <div className="cluster-list">
+                    {data.ipClusters.slice(0, 8).map((c: any) => (
+                      <details key={c.ip} className="cluster">
+                        <summary>
+                          <span className="caret" />
+                          <span className="mono" style={{ flex: 1 }}>{c.ip}</span>
+                          <span className="muted">{c.accounts} accounts</span>
+                        </summary>
+                        <MemberList members={c.members} />
+                      </details>
+                    ))}
+                  </div>
+                </>
+              )}
+              {data.duplicateBios.length > 0 && (
+                <>
+                  <p className="cluster-head-label">Duplicate bios · click to see accounts</p>
+                  <div className="cluster-list">
+                    {data.duplicateBios.slice(0, 8).map((d: any, i: number) => (
+                      <details key={i} className="cluster">
+                        <summary>
+                          <span className="caret" />
+                          <span className="bio-snip" style={{ flex: 1 }}>“{d.bio.slice(0, 42)}{d.bio.length > 42 ? "…" : ""}”</span>
+                          <span className="muted">{d.num} accounts</span>
+                        </summary>
+                        <MemberList members={d.members} />
+                      </details>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           </div>
