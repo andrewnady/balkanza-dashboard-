@@ -153,7 +153,22 @@ export default function Safety() {
                 <div>
                   <ClusterGroup
                     title="Shared-IP clusters"
-                    clusters={data.ipClusters.map((c: any) => ({ label: <span className="mono">{c.ip}</span>, count: c.accounts, members: c.members }))}
+                    clusters={data.ipClusters.map((c: any) => ({
+                      label: (
+                        <a
+                          className="mono ip-link"
+                          href={`https://ip-api.com/#${c.ip}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          title="Look up IP location & ISP"
+                        >
+                          {c.ip} ↗
+                        </a>
+                      ),
+                      count: c.accounts,
+                      members: c.members,
+                    }))}
                   />
                   <ClusterGroup
                     title="Duplicate bios"

@@ -160,6 +160,8 @@ a { color: inherit; }
 .signal-group { margin-top: 4px; }
 .signal-group + .signal-group { margin-top: 14px; }
 .cluster-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ip-link { color: var(--accent); text-decoration: none; }
+.ip-link:hover { text-decoration: underline; }
 .member-list.boxed { border: 1px solid var(--border); border-radius: 9px; padding: 8px 12px; background: var(--surface-1); }
 
 /* ---------- spam-farm clusters ---------- */
