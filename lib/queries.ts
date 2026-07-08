@@ -309,7 +309,7 @@ export async function getSafety(params: PeriodInput) {
 
   // Every metric is scoped to profiles/users registered in the selected window
   // (and reports/IP-logs recorded in it), so the whole section reacts to the filter.
-  const [verification, quality, zeroPhotos, spam, reports, dupBios, ipMulti, reportedUsers, deviceClusters, botEmails] = await Promise.all([
+  const [verification, quality, zeroPhotos, spam, reports, dupBios, ipMulti, reportedUsers, botEmails] = await Promise.all([
     sql`SELECT verification_status AS status, COUNT(*) AS users FROM users
         WHERE is_admin = false AND created_at >= ${p.start}::date AND created_at < ${p.endEx}::date
         GROUP BY verification_status ORDER BY users DESC`,
@@ -352,15 +352,6 @@ export async function getSafety(params: PeriodInput) {
         WHERE r.created_at >= ${p.start}::date AND r.created_at < ${p.endEx}::date
         GROUP BY r.reported_user_id, u.first_name, u.last_name, u.email
         HAVING COUNT(*) >= 2 ORDER BY reports DESC LIMIT 10`,
-    // shared device fingerprint (same exact user-agent across >=3 accounts)
-    sql`SELECT il.user_agent, COUNT(DISTINCT il.user_id) AS accounts,
-          json_agg(DISTINCT jsonb_build_object(
-            'id', u.id,
-            'name', NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), ''),
-            'email', u.email)) AS members
-        FROM ip_logs il JOIN users u ON u.id = il.user_id
-        WHERE il.user_agent IS NOT NULL AND il.created_at >= ${p.start}::date AND il.created_at < ${p.endEx}::date
-        GROUP BY il.user_agent HAVING COUNT(DISTINCT il.user_id) >= 3 ORDER BY accounts DESC LIMIT 8`,
     // bot-like emails: 5+ consecutive digits before the @ (auto-generated handles)
     sql`SELECT COUNT(*) AS total,
           COALESCE(json_agg(jsonb_build_object('id', id, 'name', name, 'email', email)) FILTER (WHERE rn <= 15), '[]') AS sample
@@ -389,7 +380,6 @@ export async function getSafety(params: PeriodInput) {
     duplicateBios: dupBios.map((r) => ({ bio: r.bio as string, num: num(r.num), members: (r.members as any[]) || [] })),
     ipClusters: ipMulti.map((r) => ({ ip: r.ip_address as string, accounts: num(r.accounts), members: (r.members as any[]) || [] })),
     reportedUsers: reportedUsers.map((r) => ({ id: r.id as string, reports: num(r.reports), category: (r.top_category as string) || "other", name: r.name as string | null, email: r.email as string | null })),
-    deviceClusters: deviceClusters.map((r) => ({ ua: (r.user_agent as string) || "unknown", accounts: num(r.accounts), members: (r.members as any[]) || [] })),
     botEmails: { total: num(botEmails[0].total), sample: (botEmails[0].sample as any[]) || [] },
   };
 }

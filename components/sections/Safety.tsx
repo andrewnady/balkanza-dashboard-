@@ -70,13 +70,6 @@ function ClusterGroup({ title, clusters }: { title: string; clusters: { label: R
   );
 }
 
-// Shorten a user-agent to something recognisable for the cluster label.
-function shortUA(ua: string): string {
-  const m = ua.match(/(Chrome|Firefox|Safari|Edg|OPR|SamsungBrowser|CriOS|FxiOS)[/ ]?([\d.]+)?/i);
-  const os = ua.match(/\((?:[^;)]*;\s*)?([^;)]+)/);
-  const browser = m ? m[1].replace("Edg", "Edge").replace("CriOS", "Chrome iOS").replace("OPR", "Opera") : "device";
-  return `${browser}${os ? " · " + os[1].trim() : ""}`;
-}
 
 export default function Safety() {
   const [period, setPeriod] = useState<PeriodValue>({ days: 1 });
@@ -148,13 +141,12 @@ export default function Safety() {
 
             <div className="signal-chips">
               <Chip n={data.ipClusters.length} label="shared-IP clusters" />
-              <Chip n={data.deviceClusters.length} label="shared-device clusters" />
               <Chip n={data.duplicateBios.length} label="duplicate bios" />
               <Chip n={data.reportedUsers.length} label="repeatedly reported" />
               <Chip n={data.botEmails.total} label="bot-like emails" />
             </div>
 
-            {data.ipClusters.length + data.deviceClusters.length + data.duplicateBios.length + data.reportedUsers.length + data.botEmails.total === 0 ? (
+            {data.ipClusters.length + data.duplicateBios.length + data.reportedUsers.length + data.botEmails.total === 0 ? (
               <p className="muted" style={{ fontSize: 13, marginTop: 10 }}>No spam signals in this window. Widen the range (try “All time”) to scan the whole base.</p>
             ) : (
               <div className="grid grid-2" style={{ marginTop: 12 }}>
@@ -162,10 +154,6 @@ export default function Safety() {
                   <ClusterGroup
                     title="Shared-IP clusters"
                     clusters={data.ipClusters.map((c: any) => ({ label: <span className="mono">{c.ip}</span>, count: c.accounts, members: c.members }))}
-                  />
-                  <ClusterGroup
-                    title="Shared device fingerprints"
-                    clusters={data.deviceClusters.map((c: any) => ({ label: shortUA(c.ua), count: c.accounts, members: c.members }))}
                   />
                   <ClusterGroup
                     title="Duplicate bios"
