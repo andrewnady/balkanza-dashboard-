@@ -315,7 +315,7 @@ export async function getSafety(params: PeriodInput) {
         GROUP BY verification_status ORDER BY users DESC`,
     sql`SELECT COUNT(*) AS complete,
           COUNT(*) FILTER (WHERE gender IS NULL OR gender = '') AS missing_gender,
-          COUNT(*) FILTER (WHERE heritage_country IS NULL OR heritage_country = '') AS missing_heritage,
+          COUNT(*) FILTER (WHERE heritage_countries IS NULL OR cardinality(heritage_countries) = 0) AS missing_heritage,
           COUNT(*) FILTER (WHERE residence_country IS NULL OR residence_country = '') AS missing_residence,
           COUNT(*) FILTER (WHERE birthdate IS NULL) AS missing_birthdate
         FROM profiles WHERE is_complete = true AND created_at >= ${p.start}::date AND created_at < ${p.endEx}::date`,
