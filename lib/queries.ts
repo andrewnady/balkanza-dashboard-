@@ -96,11 +96,33 @@ export async function getGrowth(daysIn: unknown) {
 /* FUNNEL — register → complete → like → match → message + completion  */
 /* ------------------------------------------------------------------ */
 export async function getFunnel(daysIn: unknown) {
-  const days = clampDays(daysIn, [7, 30, 90]);
+  const days = clampDays(daysIn, [1, 7, 28, 90], 28);
+  // current cohort registered in [today-(days-1), today]; previous = the equal
+  // window immediately before it, so each stage can be compared like-for-like.
+  const d1 = days - 1;
+  const d2 = 2 * days - 1;
 
-  const [funnel, completion] = await Promise.all([
+  const [cur, prev, completion] = await Promise.all([
     sql`WITH cohort AS (
-          SELECT id FROM users WHERE is_admin = false AND created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${days})
+          SELECT id FROM users WHERE is_admin = false
+            AND created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d1})
+            AND created_at <  CURRENT_DATE + INTERVAL '1 day'
+        )
+        SELECT
+          COUNT(DISTINCT c.id)                              AS registered,
+          COUNT(DISTINCT c.id) FILTER (WHERE p.is_complete) AS completed_profile,
+          COUNT(DISTINCT l.liker_id)                        AS sent_a_like,
+          COUNT(DISTINCT m.liker_id)                        AS got_a_match,
+          COUNT(DISTINCT msg.sender_id)                     AS sent_a_message
+        FROM cohort c
+        LEFT JOIN profiles p   ON p.user_id  = c.id
+        LEFT JOIN likes    l   ON l.liker_id = c.id
+        LEFT JOIN likes    m   ON m.liker_id = c.id AND m.is_match = true
+        LEFT JOIN messages msg ON msg.sender_id = c.id AND msg.message_type = 'user'`,
+    sql`WITH cohort AS (
+          SELECT id FROM users WHERE is_admin = false
+            AND created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d2})
+            AND created_at <  CURRENT_DATE - (INTERVAL '1 day' * ${d1})
         )
         SELECT
           COUNT(DISTINCT c.id)                              AS registered,
@@ -120,14 +142,16 @@ export async function getFunnel(daysIn: unknown) {
         GROUP BY u.created_at::date ORDER BY date`,
   ]);
 
-  const f = funnel[0];
-  const stages = [
-    { stage: "Registered", users: num(f.registered) },
-    { stage: "Completed profile", users: num(f.completed_profile) },
-    { stage: "Sent a like", users: num(f.sent_a_like) },
-    { stage: "Got a match", users: num(f.got_a_match) },
-    { stage: "Sent a message", users: num(f.sent_a_message) },
+  const c = cur[0];
+  const pv = prev[0];
+  const defs: [string, string][] = [
+    ["Registered", "registered"],
+    ["Completed profile", "completed_profile"],
+    ["Sent a like", "sent_a_like"],
+    ["Got a match", "got_a_match"],
+    ["Sent a message", "sent_a_message"],
   ];
+  const stages = defs.map(([stage, key]) => ({ stage, users: num(c[key]), prevUsers: num(pv[key]) }));
   const top = stages[0].users || 1;
   return {
     days,

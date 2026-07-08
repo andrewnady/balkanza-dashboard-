@@ -5,24 +5,37 @@ import { useMetrics, Segmented, SectionHead, CardSkeleton, ErrorNote, fmtInt, fm
 import { HBars, TrendLine } from "../ui/charts";
 
 const RANGES = [
-  { label: "7d cohort", value: 7 },
-  { label: "30d cohort", value: 30 },
-  { label: "90d cohort", value: 90 },
+  { label: "Today", value: 1 },
+  { label: "7d", value: 7 },
+  { label: "28d", value: 28 },
+  { label: "90d", value: 90 },
 ];
 
 // ordinal blue ramp (dark → light not allowed below step 250 on light surface)
 const FUNNEL_COLORS = ["#184f95", "#256abf", "#3987e5", "#5598e7", "#86b6ef"];
 
+function Delta({ cur, prev }: { cur: number; prev: number }) {
+  if (prev === 0) return <span className="delta flat">{cur > 0 ? "new" : "–"}</span>;
+  const pct = (100 * (cur - prev)) / prev;
+  const up = cur >= prev;
+  return (
+    <span className={`delta ${up ? "up" : "down"}`}>
+      {up ? "▲" : "▼"} {Math.abs(Math.round(pct * 10) / 10)}%
+    </span>
+  );
+}
+
 export default function Funnel() {
-  const [days, setDays] = useState<number>(30);
+  const [days, setDays] = useState<number>(28);
   const { data, error, loading } = useMetrics<any>("funnel", { days });
+  const prevLabel = days === 1 ? "yesterday" : `prev ${days}d`;
 
   return (
     <section className="section" id="funnel">
       <SectionHead
         id="funnel-h"
         title="Activation funnel"
-        desc="For users who registered in the window: how far down the register → complete → like → match → message path they get."
+        desc="For users who registered in the window: how far they get down register → complete → like → match → message — compared to the same period before."
       >
         <span className="filter-label">Cohort</span>
         <Segmented value={days} options={RANGES} onChange={setDays} />
@@ -34,20 +47,42 @@ export default function Funnel() {
         <div className="grid grid-3">
           <div className="card col-span-2">
             <p className="card-title">Funnel — distinct users per stage</p>
-            <p className="card-note">Each bar is the number of unique users who reached that stage.</p>
+            <p className="card-note">
+              Bars = this period&apos;s cohort. Table compares each stage with {prevLabel}.
+            </p>
             {loading || !data ? (
               <CardSkeleton height={260} />
             ) : (
               <>
                 <HBars data={data.stages} labelKey="stage" valueKey="users" colors={FUNNEL_COLORS} valueFmt={fmtInt} />
-                <div className="legend">
-                  {data.stages.map((s: any, i: number) => (
-                    <span key={s.stage}>
-                      <span className="dot" style={{ background: FUNNEL_COLORS[i] }} />
-                      {s.stage}: <strong>{fmtPct(s.pctOfTop)}</strong> of registered
-                      {i > 0 && <span className="muted"> ({fmtPct(s.stepConversion)} step)</span>}
-                    </span>
-                  ))}
+                <div className="tbl-scroll" style={{ marginTop: 8 }}>
+                  <table className="tbl">
+                    <thead>
+                      <tr>
+                        <th>Stage</th>
+                        <th className="num">This period</th>
+                        <th className="num">{prevLabel}</th>
+                        <th className="num">Δ</th>
+                        <th className="num">% of reg.</th>
+                        <th className="num">Step</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.stages.map((s: any, i: number) => (
+                        <tr key={s.stage}>
+                          <td style={{ fontWeight: 600 }}>
+                            <span className="dot" style={{ background: FUNNEL_COLORS[i] }} />
+                            {s.stage}
+                          </td>
+                          <td className="num" style={{ fontWeight: 700 }}>{fmtInt(s.users)}</td>
+                          <td className="num muted">{fmtInt(s.prevUsers)}</td>
+                          <td className="num"><Delta cur={s.users} prev={s.prevUsers} /></td>
+                          <td className="num muted">{fmtPct(s.pctOfTop)}</td>
+                          <td className="num muted">{i === 0 ? "—" : fmtPct(s.stepConversion)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </>
             )}
