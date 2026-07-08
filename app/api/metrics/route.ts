@@ -7,10 +7,12 @@ import {
   getLiquidity,
   getMonetization,
   getSafety,
+  getDiagnostics,
 } from "@/lib/queries";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -56,6 +58,9 @@ export async function GET(req: NextRequest) {
         break;
       case "safety":
         data = await getSafety(period);
+        break;
+      case "diagnostics":
+        data = await getDiagnostics();
         break;
       default:
         return NextResponse.json({ error: `Unknown section: ${section}` }, { status: 400 });

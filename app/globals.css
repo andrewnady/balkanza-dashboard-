@@ -246,7 +246,16 @@ a { color: inherit; }
 .callout { display: flex; gap: 10px; padding: 12px 14px; border-radius: var(--radius-sm); font-size: 13px; align-items: flex-start; }
 .callout.crit { background: rgba(208,59,59,0.10); border: 1px solid rgba(208,59,59,0.25); }
 .callout.warn { background: rgba(250,178,25,0.10); border: 1px solid rgba(250,178,25,0.28); }
+.callout.info { background: var(--accent-weak); border: 1px solid rgba(225,29,72,0.22); }
 .callout-icon { font-size: 15px; line-height: 1.2; }
+
+/* time-to-value rows */
+.ttv-rows { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+.ttv-row { display: grid; grid-template-columns: 1fr auto auto; align-items: baseline; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.ttv-row:last-child { border-bottom: 0; }
+.ttv-label { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.ttv-val { font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
+.ttv-ever { font-size: 12px; }
 
 /* misc */
 .muted { color: var(--text-muted); }

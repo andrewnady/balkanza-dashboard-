@@ -302,6 +302,74 @@ export async function getMonetization(params: PeriodInput) {
 }
 
 /* ------------------------------------------------------------------ */
+/* DIAGNOSTICS — the leaky-bucket analysis (structural, all-time)      */
+/* ------------------------------------------------------------------ */
+export async function getDiagnostics() {
+  const [retention, ttv, dead, push] = await Promise.all([
+    // Day-1 behaviour of a mature cohort (registered 7–30 days ago), split by
+    // whether they're still active in the last 3 days.
+    sql`WITH cohort AS (
+          SELECT id, created_at,
+            CASE WHEN last_active_at IS NULL THEN 'ghost'
+                 WHEN last_active_at >= CURRENT_DATE - INTERVAL '3 days' THEN 'retained'
+                 ELSE 'churned' END AS grp
+          FROM users WHERE is_admin = false
+            AND created_at::date BETWEEN CURRENT_DATE - 30 AND CURRENT_DATE - 7
+        )
+        SELECT grp, COUNT(*) AS n,
+          ROUND(100.0*AVG((EXISTS(SELECT 1 FROM likes l WHERE l.liker_id=c.id AND l.created_at < c.created_at + INTERVAL '1 day'))::int),1) AS liked,
+          ROUND(100.0*AVG((EXISTS(SELECT 1 FROM likes l WHERE l.liker_id=c.id AND l.is_match AND l.created_at < c.created_at + INTERVAL '1 day'))::int),1) AS matched,
+          ROUND(100.0*AVG((EXISTS(SELECT 1 FROM messages m WHERE m.sender_id=c.id AND m.message_type='user' AND m.created_at < c.created_at + INTERVAL '1 day'))::int),1) AS messaged,
+          ROUND(100.0*AVG((EXISTS(SELECT 1 FROM profiles p WHERE p.user_id=c.id AND p.is_complete))::int),1) AS complete
+        FROM cohort c GROUP BY grp`,
+    // Median hours from signup to first like / match / message (+ how many ever did it).
+    sql`WITH fl AS (SELECT liker_id uid, MIN(created_at) t FROM likes GROUP BY 1),
+             fm AS (SELECT liker_id uid, MIN(created_at) t FROM likes WHERE is_match GROUP BY 1),
+             fg AS (SELECT sender_id uid, MIN(created_at) t FROM messages WHERE message_type='user' GROUP BY 1)
+        SELECT
+          ROUND(percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (fl.t-u.created_at))/3600)::numeric,1) AS like_h,
+          ROUND(percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (fm.t-u.created_at))/3600)::numeric,1) AS match_h,
+          ROUND(percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (fg.t-u.created_at))/3600)::numeric,1) AS msg_h,
+          COUNT(fl.t) AS ever_liked, COUNT(fm.t) AS ever_matched, COUNT(fg.t) AS ever_messaged, COUNT(*) AS total
+        FROM users u LEFT JOIN fl ON fl.uid=u.id LEFT JOIN fm ON fm.uid=u.id LEFT JOIN fg ON fg.uid=u.id
+        WHERE u.is_admin=false`,
+    // Dead-match split: of all matches, how many had 0 / 1 / 2 people message.
+    sql`WITH matches AS (SELECT DISTINCT LEAST(liker_id,liked_id) a, GREATEST(liker_id,liked_id) b FROM likes WHERE is_match=true),
+             pm AS (SELECT LEAST(sender_id,receiver_id) a, GREATEST(sender_id,receiver_id) b, COUNT(DISTINCT sender_id) senders FROM messages WHERE message_type='user' GROUP BY 1,2)
+        SELECT COALESCE(pm.senders,0) AS senders, COUNT(*) AS matches
+        FROM matches m LEFT JOIN pm ON pm.a=m.a AND pm.b=m.b GROUP BY 1`,
+    // Push reach: how many users could actually be re-engaged.
+    sql`SELECT (SELECT COUNT(DISTINCT user_id) FROM push_notification_tokens) AS tokens,
+               (SELECT COUNT(*) FROM users WHERE is_admin=false) AS users`,
+  ]);
+
+  const g = (name: string) => retention.find((r) => r.grp === name) || {};
+  const grp = (r: any) => ({
+    n: num(r.n), liked: num(r.liked), matched: num(r.matched), messaged: num(r.messaged), complete: num(r.complete),
+  });
+  const t = ttv[0];
+  const deadBy = (s: number) => num((dead.find((r) => num(r.senders) === s) || {}).matches);
+  const neither = deadBy(0), oneSided = deadBy(1), alive = deadBy(2);
+  const totalMatches = neither + oneSided + alive;
+  const cohortN = num(g("retained").n) + num(g("churned").n) + num(g("ghost").n);
+
+  return {
+    retention: {
+      cohortN,
+      retained: grp(g("retained")),
+      churned: grp(g("churned")),
+      ghost: grp(g("ghost")),
+    },
+    timeToValue: {
+      likeH: num(t.like_h), matchH: num(t.match_h), msgH: num(t.msg_h),
+      everLiked: num(t.ever_liked), everMatched: num(t.ever_matched), everMessaged: num(t.ever_messaged), total: num(t.total),
+    },
+    deadMatches: { neither, oneSided, alive, total: totalMatches },
+    pushReach: { tokens: num(push[0].tokens), users: num(push[0].users) },
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* TRUST & SAFETY — verification, data quality, spam signals           */
 /* ------------------------------------------------------------------ */
 export async function getSafety(params: PeriodInput) {

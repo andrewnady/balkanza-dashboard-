@@ -5,6 +5,7 @@ import Overview from "./sections/Overview";
 import Growth from "./sections/Growth";
 import Funnel from "./sections/Funnel";
 import Engagement from "./sections/Engagement";
+import Diagnostics from "./sections/Diagnostics";
 import Liquidity from "./sections/Liquidity";
 import Monetization from "./sections/Monetization";
 import Safety from "./sections/Safety";
@@ -14,6 +15,7 @@ const NAV = [
   { id: "growth", label: "Growth" },
   { id: "funnel", label: "Funnel" },
   { id: "engagement", label: "Engagement" },
+  { id: "diagnostics", label: "Diagnostics" },
   { id: "liquidity", label: "Liquidity" },
   { id: "monetization", label: "Monetization" },
   { id: "safety", label: "Trust & Safety" },
@@ -72,6 +74,7 @@ export default function Dashboard() {
         <Growth />
         <Funnel />
         <Engagement />
+        <Diagnostics />
         <Liquidity />
         <Monetization />
         <Safety />
