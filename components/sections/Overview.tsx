@@ -11,7 +11,7 @@ const RANGES = [
 ];
 
 export default function Overview({ onFetched }: { onFetched?: (t: string | null) => void }) {
-  const [period, setPeriod] = useState<PeriodValue>({ days: 30 });
+  const [period, setPeriod] = useState<PeriodValue>({ days: 1 });
   const { data, error, loading, fetchedAt } = useMetrics<any>("overview", period);
 
   if (onFetched && fetchedAt) onFetched(fetchedAt);

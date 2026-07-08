@@ -22,7 +22,7 @@ const TYPE_COLORS: Record<string, string> = {
 };
 
 export default function Monetization() {
-  const [period, setPeriod] = useState<PeriodValue>({ days: 30 });
+  const [period, setPeriod] = useState<PeriodValue>({ days: 1 });
   const { data, error, loading } = useMetrics<any>("monetization", period);
   const label = periodLabel(period);
 

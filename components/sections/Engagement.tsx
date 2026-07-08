@@ -12,7 +12,7 @@ const RANGES = [
 ];
 
 export default function Engagement() {
-  const [period, setPeriod] = useState<PeriodValue>({ days: 30 });
+  const [period, setPeriod] = useState<PeriodValue>({ days: 1 });
   const { data, error, loading } = useMetrics<any>("engagement", period);
 
   return (

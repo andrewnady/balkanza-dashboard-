@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useMetrics, PeriodFilter, PeriodValue, periodLabel, SectionHead, CardSkeleton, ErrorNote, StatTile, fmtInt, fmtPct } from "../ui/primitives";
 import { HBars, TrendArea } from "../ui/charts";
 
@@ -39,8 +39,47 @@ function MemberList({ members }: { members: { id: string; name: string | null; e
   );
 }
 
+function Chip({ n, label }: { n: number; label: string }) {
+  return (
+    <div className="signal-chip">
+      <span className={`signal-chip-n ${n > 0 ? "on" : "off"}`}>{fmtInt(n)}</span>
+      <span className="signal-chip-label">{label}</span>
+    </div>
+  );
+}
+
+// Expandable list of clusters, each revealing its member accounts as profile links.
+function ClusterGroup({ title, clusters }: { title: string; clusters: { label: ReactNode; count: number; members: any[] }[] }) {
+  if (!clusters.length) return null;
+  return (
+    <div className="signal-group">
+      <p className="cluster-head-label">{title}</p>
+      <div className="cluster-list">
+        {clusters.map((c, i) => (
+          <details key={i} className="cluster">
+            <summary>
+              <span className="caret" />
+              <span className="cluster-label">{c.label}</span>
+              <span className="muted">{c.count} accounts</span>
+            </summary>
+            <MemberList members={c.members} />
+          </details>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Shorten a user-agent to something recognisable for the cluster label.
+function shortUA(ua: string): string {
+  const m = ua.match(/(Chrome|Firefox|Safari|Edg|OPR|SamsungBrowser|CriOS|FxiOS)[/ ]?([\d.]+)?/i);
+  const os = ua.match(/\((?:[^;)]*;\s*)?([^;)]+)/);
+  const browser = m ? m[1].replace("Edg", "Edge").replace("CriOS", "Chrome iOS").replace("OPR", "Opera") : "device";
+  return `${browser}${os ? " · " + os[1].trim() : ""}`;
+}
+
 export default function Safety() {
-  const [period, setPeriod] = useState<PeriodValue>({ range: "all" });
+  const [period, setPeriod] = useState<PeriodValue>({ days: 1 });
   const { data, error, loading } = useMetrics<any>("safety", period);
   const label = periodLabel(period);
 
@@ -80,7 +119,7 @@ export default function Safety() {
             <StatTile label="Missing birthdate" value={data.quality.missing_birthdate} sub={`of ${fmtInt(data.quality.complete)} complete`} format="int" goodDirection="down" />
           </div>
 
-          <div className="grid grid-3">
+          <div className="grid grid-2">
             <div className="card">
               <p className="card-title">Verification funnel</p>
               <p className="card-note">Where users sit in identity verification.</p>
@@ -101,54 +140,71 @@ export default function Safety() {
                 <TrendArea data={data.reports} xKey="date" yKey="reports" color="var(--series-6)" valueFmt={fmtInt} height={200} />
               )}
             </div>
-            <div className="card">
-              <p className="card-title">Spam-farm signals</p>
-              <p className="card-note">Duplicate bios & shared-IP account clusters.</p>
-              <div style={{ display: "flex", gap: 22, marginBottom: 12 }}>
+          </div>
+
+          <div className="card" style={{ marginTop: 16 }}>
+            <p className="card-title">Spam &amp; abuse signals · {label}</p>
+            <p className="card-note">Signals of fake or farmed accounts. Click any group to reveal the accounts and open their profiles.</p>
+
+            <div className="signal-chips">
+              <Chip n={data.ipClusters.length} label="shared-IP clusters" />
+              <Chip n={data.deviceClusters.length} label="shared-device clusters" />
+              <Chip n={data.duplicateBios.length} label="duplicate bios" />
+              <Chip n={data.reportedUsers.length} label="repeatedly reported" />
+              <Chip n={data.botEmails.total} label="bot-like emails" />
+            </div>
+
+            {data.ipClusters.length + data.deviceClusters.length + data.duplicateBios.length + data.reportedUsers.length + data.botEmails.total === 0 ? (
+              <p className="muted" style={{ fontSize: 13, marginTop: 10 }}>No spam signals in this window. Widen the range (try “All time”) to scan the whole base.</p>
+            ) : (
+              <div className="grid grid-2" style={{ marginTop: 12 }}>
                 <div>
-                  <div className="tile-value" style={{ fontSize: 22 }}>{fmtInt(data.duplicateBios.length)}</div>
-                  <div className="tile-sub">duplicate bio texts</div>
+                  <ClusterGroup
+                    title="Shared-IP clusters"
+                    clusters={data.ipClusters.map((c: any) => ({ label: <span className="mono">{c.ip}</span>, count: c.accounts, members: c.members }))}
+                  />
+                  <ClusterGroup
+                    title="Shared device fingerprints"
+                    clusters={data.deviceClusters.map((c: any) => ({ label: shortUA(c.ua), count: c.accounts, members: c.members }))}
+                  />
+                  <ClusterGroup
+                    title="Duplicate bios"
+                    clusters={data.duplicateBios.map((d: any) => ({ label: `“${d.bio.slice(0, 46)}${d.bio.length > 46 ? "…" : ""}”`, count: d.num, members: d.members }))}
+                  />
                 </div>
                 <div>
-                  <div className="tile-value" style={{ fontSize: 22 }}>{fmtInt(data.ipClusters.length)}</div>
-                  <div className="tile-sub">IPs with ≥3 accounts</div>
+                  {data.reportedUsers.length > 0 && (
+                    <div className="signal-group">
+                      <p className="cluster-head-label">Repeatedly-reported users</p>
+                      <ul className="member-list boxed">
+                        {data.reportedUsers.map((u: any) => (
+                          <li key={u.id}>
+                            <a href={profileUrl(u.id)} target="_blank" rel="noreferrer">{u.name || u.email || u.id} ↗</a>
+                            <span className="muted"> · {u.reports} reports · {String(u.category).replace(/_/g, " ")}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {data.botEmails.total > 0 && (
+                    <div className="signal-group">
+                      <p className="cluster-head-label">Bot-like emails ({fmtInt(data.botEmails.total)})</p>
+                      <ul className="member-list boxed">
+                        {data.botEmails.sample.map((m: any) => (
+                          <li key={m.id}>
+                            <a href={profileUrl(m.id)} target="_blank" rel="noreferrer">{m.email} ↗</a>
+                            {m.name && <span className="muted"> · {m.name}</span>}
+                          </li>
+                        ))}
+                      </ul>
+                      {data.botEmails.total > data.botEmails.sample.length && (
+                        <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>+{fmtInt(data.botEmails.total - data.botEmails.sample.length)} more</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
-              {data.ipClusters.length > 0 && (
-                <>
-                  <p className="cluster-head-label">Shared-IP clusters · click to see accounts</p>
-                  <div className="cluster-list">
-                    {data.ipClusters.slice(0, 8).map((c: any) => (
-                      <details key={c.ip} className="cluster">
-                        <summary>
-                          <span className="caret" />
-                          <span className="mono" style={{ flex: 1 }}>{c.ip}</span>
-                          <span className="muted">{c.accounts} accounts</span>
-                        </summary>
-                        <MemberList members={c.members} />
-                      </details>
-                    ))}
-                  </div>
-                </>
-              )}
-              {data.duplicateBios.length > 0 && (
-                <>
-                  <p className="cluster-head-label">Duplicate bios · click to see accounts</p>
-                  <div className="cluster-list">
-                    {data.duplicateBios.slice(0, 8).map((d: any, i: number) => (
-                      <details key={i} className="cluster">
-                        <summary>
-                          <span className="caret" />
-                          <span className="bio-snip" style={{ flex: 1 }}>“{d.bio.slice(0, 42)}{d.bio.length > 42 ? "…" : ""}”</span>
-                          <span className="muted">{d.num} accounts</span>
-                        </summary>
-                        <MemberList members={d.members} />
-                      </details>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
+            )}
           </div>
         </>
       )}

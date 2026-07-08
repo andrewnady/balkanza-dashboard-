@@ -27,7 +27,7 @@ function Delta({ cur, prev, hasPrev }: { cur: number; prev: number; hasPrev: boo
 }
 
 export default function Funnel() {
-  const [period, setPeriod] = useState<PeriodValue>({ days: 28 });
+  const [period, setPeriod] = useState<PeriodValue>({ days: 1 });
   const { data, error, loading } = useMetrics<any>("funnel", period);
   const hasPrev = data?.period?.hasPrev ?? true;
   const prevLabel = data?.period?.prevLabel ?? "prev";
