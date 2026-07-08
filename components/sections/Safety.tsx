@@ -20,7 +20,7 @@ const VERIF_COLORS: Record<string, string> = {
 };
 
 export default function Safety() {
-  const [period, setPeriod] = useState<PeriodValue>({ days: 14 });
+  const [period, setPeriod] = useState<PeriodValue>({ range: "all" });
   const { data, error, loading } = useMetrics<any>("safety", period);
   const label = periodLabel(period);
 

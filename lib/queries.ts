@@ -22,10 +22,15 @@ export async function getOverview(params: PeriodInput) {
           COUNT(*) FILTER (WHERE last_active_at >= ${p.start}::date AND last_active_at < ${p.endEx}::date)         AS cur,
           COUNT(*) FILTER (WHERE last_active_at >= ${p.prevStart}::date AND last_active_at < ${p.prevEndEx}::date) AS prev
         FROM users WHERE is_admin = false AND is_disabled = false`,
-    sql`SELECT
+    sql`WITH txns AS (
+          SELECT created_at, amount FROM subscription_payments WHERE status = 'succeeded'
+          UNION ALL
+          SELECT created_at, amount FROM purchases WHERE payment_status = 'paid'
+        )
+        SELECT
           COALESCE(SUM(amount) FILTER (WHERE created_at >= ${p.start}::date AND created_at < ${p.endEx}::date), 0)         AS cur,
           COALESCE(SUM(amount) FILTER (WHERE created_at >= ${p.prevStart}::date AND created_at < ${p.prevEndEx}::date), 0) AS prev
-        FROM purchases WHERE payment_status = 'paid'`,
+        FROM txns`,
     sql`SELECT
           COUNT(*) FILTER (WHERE created_at >= ${p.start}::date AND created_at < ${p.endEx}::date)         AS cur,
           COUNT(*) FILTER (WHERE created_at >= ${p.prevStart}::date AND created_at < ${p.prevEndEx}::date) AS prev
@@ -50,7 +55,7 @@ export async function getOverview(params: PeriodInput) {
       { key: "signups", label: "New sign-ups", value: num(signups[0].cur), prev: pv(num(signups[0].prev)), format: "int" },
       { key: "active", label: "Active users", value: num(active[0].cur), prev: pv(num(active[0].prev)), format: "int" },
       { key: "matches", label: "New matches", value: num(matches[0].cur), prev: pv(num(matches[0].prev)), format: "int" },
-      { key: "revenue", label: "Revenue (one-time)", value: num(revenue[0].cur), prev: pv(num(revenue[0].prev)), format: "money" },
+      { key: "revenue", label: "Revenue (all sources)", value: num(revenue[0].cur), prev: pv(num(revenue[0].prev)), format: "money" },
       { key: "subs", label: "Active subscribers", value: num(subs[0].cur), prev: null, sub: `+${num(subs[0].new_in_period)} new in period`, format: "int" },
       { key: "conversion", label: "Free → paid", value: totalUsers ? (100 * paying) / totalUsers : 0, prev: null, sub: `${paying} of ${totalUsers.toLocaleString()} users`, format: "pct" },
     ],
@@ -209,7 +214,6 @@ export async function getLiquidity(minUsersIn: unknown, limitIn: unknown, gender
         COUNT(*) FILTER (WHERE lower(p.gender) = 'male')   AS men,
         COUNT(*) FILTER (WHERE lower(p.gender) = 'female') AS women
       FROM profiles p JOIN users u ON u.id = p.user_id AND u.is_admin = false AND u.is_disabled = false
-      WHERE p.is_complete = true
       GROUP BY 1 HAVING COUNT(*) >= ${minUsers} ORDER BY users DESC LIMIT ${limit}`;
   } else {
     rows = await sql`
@@ -217,14 +221,14 @@ export async function getLiquidity(minUsersIn: unknown, limitIn: unknown, gender
         COUNT(*) FILTER (WHERE lower(p.gender) = 'male')   AS men,
         COUNT(*) FILTER (WHERE lower(p.gender) = 'female') AS women
       FROM profiles p JOIN users u ON u.id = p.user_id AND u.is_admin = false AND u.is_disabled = false
-      WHERE p.is_complete = true AND lower(p.gender) = ${gender}
+      WHERE lower(p.gender) = ${gender}
       GROUP BY 1 HAVING COUNT(*) >= ${minUsers} ORDER BY users DESC LIMIT ${limit}`;
   }
 
   const genderTotals = await sql`
     SELECT COALESCE(NULLIF(p.gender, ''), '(none)') AS gender, COUNT(*) AS users
     FROM profiles p JOIN users u ON u.id = p.user_id AND u.is_admin = false AND u.is_disabled = false
-    WHERE p.is_complete = true GROUP BY 1 ORDER BY users DESC`;
+    GROUP BY 1 ORDER BY users DESC`;
 
   return {
     minUsers,
@@ -303,24 +307,32 @@ export async function getMonetization(params: PeriodInput) {
 export async function getSafety(params: PeriodInput) {
   const p = resolvePeriod(params, [1, 7, 14, 30, 90], 14);
 
+  // Every metric is scoped to profiles/users registered in the selected window
+  // (and reports/IP-logs recorded in it), so the whole section reacts to the filter.
   const [verification, quality, zeroPhotos, spam, reports, dupBios, ipMulti] = await Promise.all([
     sql`SELECT verification_status AS status, COUNT(*) AS users FROM users
-        WHERE is_admin = false GROUP BY verification_status ORDER BY users DESC`,
+        WHERE is_admin = false AND created_at >= ${p.start}::date AND created_at < ${p.endEx}::date
+        GROUP BY verification_status ORDER BY users DESC`,
     sql`SELECT COUNT(*) AS complete,
           COUNT(*) FILTER (WHERE gender IS NULL OR gender = '') AS missing_gender,
           COUNT(*) FILTER (WHERE heritage_country IS NULL OR heritage_country = '') AS missing_heritage,
           COUNT(*) FILTER (WHERE residence_country IS NULL OR residence_country = '') AS missing_residence,
           COUNT(*) FILTER (WHERE birthdate IS NULL) AS missing_birthdate
-        FROM profiles WHERE is_complete = true`,
+        FROM profiles WHERE is_complete = true AND created_at >= ${p.start}::date AND created_at < ${p.endEx}::date`,
     sql`SELECT COUNT(*) AS n FROM profiles p WHERE p.is_complete = true
+          AND p.created_at >= ${p.start}::date AND p.created_at < ${p.endEx}::date
           AND NOT EXISTS (SELECT 1 FROM profile_photos pp WHERE pp.profile_id = p.id)`,
     sql`SELECT COUNT(*) AS n FROM profiles p JOIN users u ON u.id = p.user_id AND u.is_disabled = false
-        WHERE p.bio ~* '(whats\\s?app|telegram|viber|instagram|snapchat|@[a-z0-9_]+|\\+?\\d[\\d \\-]{7,}\\d)'`,
+        WHERE p.created_at >= ${p.start}::date AND p.created_at < ${p.endEx}::date
+          AND p.bio ~* '(whats\\s?app|telegram|viber|instagram|snapchat|@[a-z0-9_]+|\\+?\\d[\\d \\-]{7,}\\d)'`,
     sql`SELECT created_at::date AS date, COUNT(*) AS reports FROM profile_reports
         WHERE created_at >= ${p.start}::date AND created_at < ${p.endEx}::date GROUP BY created_at::date ORDER BY date`,
     sql`SELECT p.bio, COUNT(*) AS num FROM profiles p JOIN users u ON u.id = p.user_id AND u.is_disabled = false
-        WHERE p.bio IS NOT NULL AND LENGTH(TRIM(p.bio)) > 15 GROUP BY p.bio HAVING COUNT(*) > 1 ORDER BY num DESC LIMIT 10`,
+        WHERE p.bio IS NOT NULL AND LENGTH(TRIM(p.bio)) > 15
+          AND p.created_at >= ${p.start}::date AND p.created_at < ${p.endEx}::date
+        GROUP BY p.bio HAVING COUNT(*) > 1 ORDER BY num DESC LIMIT 10`,
     sql`SELECT il.ip_address, COUNT(DISTINCT il.user_id) AS accounts FROM ip_logs il
+        WHERE il.created_at >= ${p.start}::date AND il.created_at < ${p.endEx}::date
         GROUP BY il.ip_address HAVING COUNT(DISTINCT il.user_id) >= 3 ORDER BY accounts DESC LIMIT 10`,
   ]);
 

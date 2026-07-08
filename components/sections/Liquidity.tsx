@@ -34,7 +34,7 @@ export default function Liquidity() {
       <SectionHead
         id="liquidity-h"
         title="Market liquidity"
-        desc="Density of complete profiles by residence country — where there's enough supply for the marketplace to work."
+        desc="Density of registrations by residence country — where there's enough supply for the marketplace to work."
       >
         <span className="filter-label">Gender</span>
         <Segmented value={gender} options={GENDERS} onChange={setGender} />
@@ -51,7 +51,7 @@ export default function Liquidity() {
           <div className="card">
             <p className="card-title">Top countries by residence</p>
             <p className="card-note">
-              Complete profiles{gender !== "all" ? ` · ${gender === "male" ? "men" : "women"} only` : ""} · min {min} per country.
+              All registrations{gender !== "all" ? ` · ${gender === "male" ? "men" : "women"} only` : ""} · min {min} per country.
             </p>
             {loading || !data ? (
               <CardSkeleton height={340} />
@@ -86,7 +86,7 @@ export default function Liquidity() {
             )}
           </div>
           <div className="card">
-            <p className="card-title">Gender split of complete profiles</p>
+            <p className="card-title">Gender split of all registrations</p>
             <p className="card-note">Overall supply balance across the platform.</p>
             {loading || !data ? (
               <CardSkeleton height={300} />
