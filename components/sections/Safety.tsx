@@ -21,7 +21,7 @@ const VERIF_COLORS: Record<string, string> = {
 
 // Where a flagged account links to. Override with NEXT_PUBLIC_PROFILE_URL_TEMPLATE
 // (must contain "{id}") if your admin uses a different path.
-const PROFILE_URL = process.env.NEXT_PUBLIC_PROFILE_URL_TEMPLATE || "https://balkanza.com/admin/users/{id}";
+const PROFILE_URL = process.env.NEXT_PUBLIC_PROFILE_URL_TEMPLATE || "https://balkanza.com/profile/{id}";
 const profileUrl = (id: string) => PROFILE_URL.replace("{id}", encodeURIComponent(id));
 
 function MemberList({ members }: { members: { id: string; name: string | null; email: string | null }[] }) {
