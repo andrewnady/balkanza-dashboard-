@@ -378,21 +378,20 @@ export async function getSafety(params: PeriodInput) {
   // Every metric is scoped to profiles/users registered in the selected window
   // (and reports/IP-logs recorded in it), so the whole section reacts to the filter.
   const [verification, quality, zeroPhotos, spam, reports, dupBios, ipMulti, reportedUsers, botEmails] = await Promise.all([
+    // Data-quality + verification are WHOLE-BASE health metrics (not date-windowed).
     sql`SELECT verification_status AS status, COUNT(*) AS users FROM users
-        WHERE is_admin = false AND created_at >= ${p.start}::date AND created_at < ${p.endEx}::date
+        WHERE is_admin = false
         GROUP BY verification_status ORDER BY users DESC`,
     sql`SELECT COUNT(*) AS complete,
           COUNT(*) FILTER (WHERE gender IS NULL OR gender = '') AS missing_gender,
           COUNT(*) FILTER (WHERE heritage_countries IS NULL OR cardinality(heritage_countries) = 0) AS missing_heritage,
           COUNT(*) FILTER (WHERE residence_country IS NULL OR residence_country = '') AS missing_residence,
           COUNT(*) FILTER (WHERE birthdate IS NULL) AS missing_birthdate
-        FROM profiles WHERE is_complete = true AND created_at >= ${p.start}::date AND created_at < ${p.endEx}::date`,
+        FROM profiles WHERE is_complete = true`,
     sql`SELECT COUNT(*) AS n FROM profiles p WHERE p.is_complete = true
-          AND p.created_at >= ${p.start}::date AND p.created_at < ${p.endEx}::date
           AND NOT EXISTS (SELECT 1 FROM profile_photos pp WHERE pp.profile_id = p.id)`,
     sql`SELECT COUNT(*) AS n FROM profiles p JOIN users u ON u.id = p.user_id AND u.is_disabled = false
-        WHERE p.created_at >= ${p.start}::date AND p.created_at < ${p.endEx}::date
-          AND p.bio ~* '(whats\\s?app|telegram|viber|instagram|snapchat|@[a-z0-9_]+|\\+?\\d[\\d \\-]{7,}\\d)'`,
+        WHERE p.bio ~* '(whats\\s?app|telegram|viber|instagram|snapchat|@[a-z0-9_]+|\\+?\\d[\\d \\-]{7,}\\d)'`,
     sql`SELECT created_at::date AS date, COUNT(*) AS reports FROM profile_reports
         WHERE created_at >= ${p.start}::date AND created_at < ${p.endEx}::date GROUP BY created_at::date ORDER BY date`,
     sql`SELECT p.bio, COUNT(*) AS num,
