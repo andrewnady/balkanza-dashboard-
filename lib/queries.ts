@@ -7,32 +7,42 @@ const num = (v: unknown): number => (v === null || v === undefined ? 0 : Number(
 /* OVERVIEW — headline KPIs with period-over-period deltas             */
 /* ------------------------------------------------------------------ */
 export async function getOverview(daysIn: unknown) {
-  const days = clampDays(daysIn, [7, 30, 90]);
+  const days = clampDays(daysIn, [1, 7, 30, 90]);
+  // Calendar-day windows so days=1 means "today vs yesterday":
+  //   current  = [CURRENT_DATE - (days-1), end of today]
+  //   previous = the equal-length window immediately before it
+  const d1 = days - 1; // current window start offset
+  const d2 = 2 * days - 1; // previous window start offset
 
   const [signups, active, revenue, matches, subs, conversion] = await Promise.all([
     sql`SELECT
-          COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${days}))                                   AS cur,
-          COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${2 * days})
-                             AND created_at <  CURRENT_DATE - (INTERVAL '1 day' * ${days}))                                   AS prev
+          COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d1})
+                             AND created_at <  CURRENT_DATE + INTERVAL '1 day')                                               AS cur,
+          COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d2})
+                             AND created_at <  CURRENT_DATE - (INTERVAL '1 day' * ${d1}))                                     AS prev
         FROM users WHERE is_admin = false`,
     sql`SELECT
-          COUNT(*) FILTER (WHERE last_active_at >= CURRENT_DATE - (INTERVAL '1 day' * ${days}))                               AS cur,
-          COUNT(*) FILTER (WHERE last_active_at >= CURRENT_DATE - (INTERVAL '1 day' * ${2 * days})
-                             AND last_active_at <  CURRENT_DATE - (INTERVAL '1 day' * ${days}))                               AS prev
+          COUNT(*) FILTER (WHERE last_active_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d1})
+                             AND last_active_at <  CURRENT_DATE + INTERVAL '1 day')                                           AS cur,
+          COUNT(*) FILTER (WHERE last_active_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d2})
+                             AND last_active_at <  CURRENT_DATE - (INTERVAL '1 day' * ${d1}))                                 AS prev
         FROM users WHERE is_admin = false AND is_disabled = false`,
     sql`SELECT
-          COALESCE(SUM(amount) FILTER (WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${days})), 0)                   AS cur,
-          COALESCE(SUM(amount) FILTER (WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${2 * days})
-                             AND created_at <  CURRENT_DATE - (INTERVAL '1 day' * ${days})), 0)                               AS prev
+          COALESCE(SUM(amount) FILTER (WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d1})
+                             AND created_at <  CURRENT_DATE + INTERVAL '1 day'), 0)                                           AS cur,
+          COALESCE(SUM(amount) FILTER (WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d2})
+                             AND created_at <  CURRENT_DATE - (INTERVAL '1 day' * ${d1})), 0)                                 AS prev
         FROM purchases WHERE payment_status = 'paid'`,
     sql`SELECT
-          COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${days}))                                   AS cur,
-          COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${2 * days})
-                             AND created_at <  CURRENT_DATE - (INTERVAL '1 day' * ${days}))                                   AS prev
+          COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d1})
+                             AND created_at <  CURRENT_DATE + INTERVAL '1 day')                                               AS cur,
+          COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d2})
+                             AND created_at <  CURRENT_DATE - (INTERVAL '1 day' * ${d1}))                                     AS prev
         FROM likes WHERE is_match = true`,
     sql`SELECT
           COUNT(*) FILTER (WHERE status = 'active')                                                                           AS cur,
-          COUNT(*) FILTER (WHERE status = 'active' AND created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${days}))             AS new_in_period
+          COUNT(*) FILTER (WHERE status = 'active' AND created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d1})
+                             AND created_at <  CURRENT_DATE + INTERVAL '1 day')                                               AS new_in_period
         FROM user_subscriptions`,
     sql`SELECT
           COUNT(*) FILTER (WHERE u.is_admin = false)                                                                          AS total_users,
@@ -42,6 +52,7 @@ export async function getOverview(daysIn: unknown) {
 
   const totalUsers = num(conversion[0].total_users);
   const paying = num(conversion[0].paying);
+  const periodWord = days === 1 ? "today" : "in period";
 
   return {
     days,
@@ -50,7 +61,7 @@ export async function getOverview(daysIn: unknown) {
       { key: "active", label: "Active users", value: num(active[0].cur), prev: num(active[0].prev), format: "int" },
       { key: "matches", label: "New matches", value: num(matches[0].cur), prev: num(matches[0].prev), format: "int" },
       { key: "revenue", label: "Revenue", value: num(revenue[0].cur), prev: num(revenue[0].prev), format: "money" },
-      { key: "subs", label: "Active subscribers", value: num(subs[0].cur), prev: null, sub: `+${num(subs[0].new_in_period)} new in period`, format: "int" },
+      { key: "subs", label: "Active subscribers", value: num(subs[0].cur), prev: null, sub: `+${num(subs[0].new_in_period)} new ${periodWord}`, format: "int" },
       { key: "conversion", label: "Free → paid", value: totalUsers ? (100 * paying) / totalUsers : 0, prev: null, sub: `${paying} of ${totalUsers.toLocaleString()} users`, format: "pct" },
     ],
   };
