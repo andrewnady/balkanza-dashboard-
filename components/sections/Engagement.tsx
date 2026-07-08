@@ -1,0 +1,71 @@
+"use client";
+
+import { useState } from "react";
+import { useMetrics, Segmented, SectionHead, CardSkeleton, ErrorNote, StatTile, fmtInt, fmtPct } from "../ui/primitives";
+import { HBars } from "../ui/charts";
+
+const RANGES = [
+  { label: "7d", value: 7 },
+  { label: "30d", value: 30 },
+  { label: "90d", value: 90 },
+];
+
+export default function Engagement() {
+  const [days, setDays] = useState<number>(30);
+  const { data, error, loading } = useMetrics<any>("engagement", { days });
+
+  return (
+    <section className="section" id="engagement">
+      <SectionHead id="engagement-h" title="Engagement" desc="Do matches turn into conversations, and do people come back?">
+        <span className="filter-label">Window</span>
+        <Segmented value={days} options={RANGES} onChange={setDays} />
+      </SectionHead>
+
+      {error ? (
+        <ErrorNote msg={error} />
+      ) : loading || !data ? (
+        <div className="grid grid-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <CardSkeleton key={i} height={200} />
+          ))}
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-4" style={{ marginBottom: 16 }}>
+            <StatTile label="Matches in window" value={data.matchConvo.matches} format="int" />
+            <StatTile label="Matches that talked" value={data.matchConvo.talked} sub={`${fmtPct(data.matchConvo.pct)} of matches`} format="int" />
+            <StatTile label="Dead matches (no message)" value={data.matchConvo.dead} sub="never exchanged a word" format="int" goodDirection="down" />
+            <StatTile label="Like rate on swipes" value={data.swipes.likeRate} sub={`${fmtInt(data.swipes.swipes)} swipes`} format="pct" />
+          </div>
+          <div className="grid grid-2">
+            <div className="card">
+              <p className="card-title">Retention by cohort</p>
+              <p className="card-note">% of a registration cohort active in the last 3 days.</p>
+              <HBars
+                data={data.retention.map((r: any) => ({ cohort: `${r.cohort} ago (n=${r.size})`, pct: r.pct }))}
+                labelKey="cohort"
+                valueKey="pct"
+                colors={["var(--series-1)", "var(--series-1)", "var(--series-1)"]}
+                valueFmt={fmtPct}
+              />
+            </div>
+            <div className="card">
+              <p className="card-title">Swipe outcomes</p>
+              <p className="card-note">Likes vs passes across the window.</p>
+              <HBars
+                data={[
+                  { k: "Likes", v: data.swipes.likes },
+                  { k: "Passes", v: data.swipes.passes },
+                ]}
+                labelKey="k"
+                valueKey="v"
+                colors={["var(--series-2)", "var(--series-8)"]}
+                valueFmt={fmtInt}
+              />
+            </div>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
