@@ -28,42 +28,19 @@
   --serious: #ec835a;
   --critical: #d03b3b;
 
-  --accent: #2a78d6;
-  --accent-weak: rgba(42, 120, 214, 0.10);
+  /* Balkanza brand crimson (chrome only — chart series keep the validated palette) */
+  --accent: #e11d48;
+  --accent-weak: rgba(225, 29, 72, 0.10);
+  --brand-from: #ec1b4b;
+  --brand-to: #f26a3b;
 
   --radius: 14px;
   --radius-sm: 9px;
   --shadow: 0 1px 2px rgba(11, 11, 11, 0.04), 0 4px 16px rgba(11, 11, 11, 0.05);
   --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --page: #0d0d0d;
-    --surface-1: #1a1a19;
-    --surface-2: #222220;
-    --text-primary: #ffffff;
-    --text-secondary: #c3c2b7;
-    --text-muted: #898781;
-    --grid: #2c2c2a;
-    --axis: #383835;
-    --border: rgba(255, 255, 255, 0.10);
-    --border-strong: rgba(255, 255, 255, 0.16);
-
-    --series-1: #3987e5;
-    --series-2: #199e70;
-    --series-3: #c98500;
-    --series-4: #008300;
-    --series-5: #9085e9;
-    --series-6: #e66767;
-    --series-7: #d55181;
-    --series-8: #d95926;
-
-    --good-text: #0ca30c;
-    --accent: #3987e5;
-    --accent-weak: rgba(57, 135, 229, 0.14);
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 20px rgba(0, 0, 0, 0.35);
-  }
+  /* Always render light, and stop the browser from auto-darkening controls. */
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; }
@@ -94,15 +71,11 @@ a { color: inherit; }
   max-width: 1320px; margin: 0 auto; padding: 14px 20px;
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
 }
-.brand { display: flex; align-items: center; gap: 12px; }
-.brand-mark {
-  width: 34px; height: 34px; border-radius: 9px;
-  background: linear-gradient(135deg, var(--series-1), var(--series-5));
-  display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 17px;
-  box-shadow: var(--shadow);
-}
-.brand-title { font-weight: 700; font-size: 16px; letter-spacing: -0.01em; }
-.brand-sub { font-size: 12px; color: var(--text-muted); margin-top: -2px; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-logo { width: 30px; height: 30px; display: block; flex: none; }
+.brand-word { font-weight: 800; font-size: 22px; letter-spacing: -0.02em; color: var(--text-primary); }
+.brand-divider { width: 1px; height: 22px; background: var(--border); margin: 0 4px; }
+.brand-sub { font-size: 12px; color: var(--text-muted); font-weight: 600; }
 
 .meta { font-size: 12px; color: var(--text-muted); text-align: right; }
 .meta strong { color: var(--text-secondary); font-weight: 600; }
@@ -121,7 +94,7 @@ a { color: inherit; }
   color: var(--text-secondary); padding: 7px 13px; border-radius: 999px;
   border: 1px solid transparent;
 }
-.nav a:hover { background: var(--surface-2); color: var(--text-primary); }
+.nav a:hover { background: var(--accent-weak); color: var(--accent); }
 
 /* ---------- Section ---------- */
 .section { margin-top: 34px; scroll-margin-top: 120px; }
