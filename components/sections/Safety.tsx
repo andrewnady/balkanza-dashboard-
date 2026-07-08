@@ -105,7 +105,13 @@ export default function Safety() {
             </div>
           )}
 
-          <div className="grid grid-4" style={{ marginBottom: 16 }}>
+          <div className="grid grid-5" style={{ marginBottom: 16 }}>
+            <StatTile
+              label="Heritage coverage"
+              value={data.quality.complete ? (100 * (data.quality.complete - data.quality.missing_heritage)) / data.quality.complete : 0}
+              sub={`${fmtInt(data.quality.complete - data.quality.missing_heritage)} of ${fmtInt(data.quality.complete)} complete`}
+              format="pct"
+            />
             <StatTile label="Bios with contact info" value={data.spamBios} sub="whatsapp / telegram / @handles / phone" format="int" goodDirection="down" />
             <StatTile label="Complete profiles, no photo" value={data.zeroPhotos} sub="can't function in-app" format="int" goodDirection="down" />
             <StatTile label="Missing gender" value={data.quality.missing_gender} sub={`of ${fmtInt(data.quality.complete)} complete`} format="int" goodDirection="down" />
