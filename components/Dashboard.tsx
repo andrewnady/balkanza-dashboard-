@@ -27,21 +27,25 @@ export default function Dashboard() {
       <header className="topbar">
         <div className="topbar-inner">
           <div className="brand">
-            <svg className="brand-logo" viewBox="0 0 32 32" role="img" aria-label="Balkanza">
+            <svg className="brand-logo" viewBox="0 0 32 32" fill="none" role="img" aria-label="Balkanza">
               <defs>
-                <linearGradient id="blk-mark" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0" stopColor="var(--brand-from)" />
-                  <stop offset="1" stopColor="var(--brand-to)" />
+                <linearGradient id="blk-mark" x1="4" y1="6" x2="28" y2="26" gradientUnits="userSpaceOnUse">
+                  <stop offset="0" stopColor="#e0173c" />
+                  <stop offset="1" stopColor="#e8384f" />
                 </linearGradient>
               </defs>
               <path
-                fill="url(#blk-mark)"
-                d="M16 29S3 21.2 3 12.1C3 7.6 6.4 4 10.6 4c2.6 0 4.6 1.3 5.4 3.2C16.8 5.3 18.8 4 21.4 4 25.6 4 29 7.6 29 12.1 29 21.2 16 29 16 29z"
+                d="M16 26.5C12.2 22.9 6.7 19.2 6.7 13.4c0-3.2 2.3-5.4 5.1-5.4 2.4 0 3.9 1.6 4.2 3.7.3-2.1 1.8-3.7 4.2-3.7 2.8 0 5.1 2.2 5.1 5.4 0 5.8-5.5 9.5-9.3 13.1z"
+                stroke="url(#blk-mark)"
+                strokeWidth="3.1"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               />
               <path
-                fill="#fff"
-                opacity="0.92"
-                d="M13.6 10.4c2.6 0 4.2 1.3 4.2 3.4 0 1.3-.7 2.3-1.9 2.7 1.5.3 2.4 1.4 2.4 2.9 0 2.2-1.7 3.5-4.5 3.5h-4.2V10.4h4zM12 14.9h1.3c1 0 1.6-.5 1.6-1.4 0-.8-.6-1.3-1.6-1.3H12v2.7zm0 5h1.5c1.1 0 1.7-.5 1.7-1.5 0-.9-.6-1.4-1.8-1.4H12v2.9z"
+                d="M12.1 15.1c-1.7.2-3-.9-3-2.6 0-1.6 1.2-2.7 2.7-2.7"
+                stroke="url(#blk-mark)"
+                strokeWidth="3.1"
+                strokeLinecap="round"
               />
             </svg>
             <span className="brand-word">Balkanza</span>

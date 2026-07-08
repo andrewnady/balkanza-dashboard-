@@ -15,7 +15,12 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const section = searchParams.get("section") || "overview";
-  const days = searchParams.get("days");
+  const period = {
+    days: searchParams.get("days"),
+    range: searchParams.get("range"),
+    from: searchParams.get("from"),
+    to: searchParams.get("to"),
+  };
 
   if (!process.env.DATABASE_URL) {
     return NextResponse.json(
@@ -28,16 +33,16 @@ export async function GET(req: NextRequest) {
     let data: unknown;
     switch (section) {
       case "overview":
-        data = await getOverview(days);
+        data = await getOverview(period);
         break;
       case "growth":
-        data = await getGrowth(days);
+        data = await getGrowth(period);
         break;
       case "funnel":
-        data = await getFunnel(days);
+        data = await getFunnel(period);
         break;
       case "engagement":
-        data = await getEngagement(days);
+        data = await getEngagement(period);
         break;
       case "liquidity":
         data = await getLiquidity(
@@ -47,10 +52,10 @@ export async function GET(req: NextRequest) {
         );
         break;
       case "monetization":
-        data = await getMonetization(days);
+        data = await getMonetization(period);
         break;
       case "safety":
-        data = await getSafety(days);
+        data = await getSafety(period);
         break;
       default:
         return NextResponse.json({ error: `Unknown section: ${section}` }, { status: 400 });

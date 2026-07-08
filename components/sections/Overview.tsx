@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMetrics, Segmented, StatTile, SectionHead, CardSkeleton, ErrorNote } from "../ui/primitives";
+import { useMetrics, PeriodFilter, PeriodValue, StatTile, SectionHead, CardSkeleton, ErrorNote } from "../ui/primitives";
 
 const RANGES = [
   { label: "Today", value: 1 },
@@ -11,8 +11,8 @@ const RANGES = [
 ];
 
 export default function Overview({ onFetched }: { onFetched?: (t: string | null) => void }) {
-  const [days, setDays] = useState<number>(30);
-  const { data, error, loading, fetchedAt } = useMetrics<any>("overview", { days });
+  const [period, setPeriod] = useState<PeriodValue>({ days: 30 });
+  const { data, error, loading, fetchedAt } = useMetrics<any>("overview", period);
 
   if (onFetched && fetchedAt) onFetched(fetchedAt);
 
@@ -20,7 +20,7 @@ export default function Overview({ onFetched }: { onFetched?: (t: string | null)
     <section className="section" id="overview">
       <SectionHead id="overview-h" title="Overview" desc="The headline numbers, current period vs the one before it.">
         <span className="filter-label">Period</span>
-        <Segmented value={days} options={RANGES} onChange={setDays} />
+        <PeriodFilter presets={RANGES} value={period} onChange={setPeriod} />
       </SectionHead>
 
       {error ? (

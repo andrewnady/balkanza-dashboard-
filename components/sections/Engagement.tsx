@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMetrics, Segmented, SectionHead, CardSkeleton, ErrorNote, StatTile, fmtInt, fmtPct } from "../ui/primitives";
+import { useMetrics, PeriodFilter, PeriodValue, SectionHead, CardSkeleton, ErrorNote, StatTile, fmtInt, fmtPct } from "../ui/primitives";
 import { HBars } from "../ui/charts";
 
 const RANGES = [
@@ -12,14 +12,14 @@ const RANGES = [
 ];
 
 export default function Engagement() {
-  const [days, setDays] = useState<number>(30);
-  const { data, error, loading } = useMetrics<any>("engagement", { days });
+  const [period, setPeriod] = useState<PeriodValue>({ days: 30 });
+  const { data, error, loading } = useMetrics<any>("engagement", period);
 
   return (
     <section className="section" id="engagement">
       <SectionHead id="engagement-h" title="Engagement" desc="Do matches turn into conversations, and do people come back?">
         <span className="filter-label">Window</span>
-        <Segmented value={days} options={RANGES} onChange={setDays} />
+        <PeriodFilter presets={RANGES} value={period} onChange={setPeriod} />
       </SectionHead>
 
       {error ? (

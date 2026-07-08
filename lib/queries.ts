@@ -1,67 +1,57 @@
 import { sql, clampDays } from "./db";
+import { resolvePeriod, type PeriodInput, type Period } from "./period";
 
 // Helper: coerce Neon's string-typed numerics to JS numbers.
 const num = (v: unknown): number => (v === null || v === undefined ? 0 : Number(v));
 
+// Compact period descriptor returned to the client for labels.
+const meta = (p: Period) => ({ mode: p.mode, days: p.days, label: p.label, prevLabel: p.prevLabel, hasPrev: p.hasPrev });
+
 /* ------------------------------------------------------------------ */
 /* OVERVIEW — headline KPIs with period-over-period deltas             */
 /* ------------------------------------------------------------------ */
-export async function getOverview(daysIn: unknown) {
-  const days = clampDays(daysIn, [1, 7, 30, 90]);
-  // Calendar-day windows so days=1 means "today vs yesterday":
-  //   current  = [CURRENT_DATE - (days-1), end of today]
-  //   previous = the equal-length window immediately before it
-  const d1 = days - 1; // current window start offset
-  const d2 = 2 * days - 1; // previous window start offset
+export async function getOverview(params: PeriodInput) {
+  const p = resolvePeriod(params, [1, 7, 30, 90], 30);
 
   const [signups, active, revenue, matches, subs, conversion] = await Promise.all([
     sql`SELECT
-          COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d1})
-                             AND created_at <  CURRENT_DATE + INTERVAL '1 day')                                               AS cur,
-          COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d2})
-                             AND created_at <  CURRENT_DATE - (INTERVAL '1 day' * ${d1}))                                     AS prev
+          COUNT(*) FILTER (WHERE created_at >= ${p.start}::date AND created_at < ${p.endEx}::date)         AS cur,
+          COUNT(*) FILTER (WHERE created_at >= ${p.prevStart}::date AND created_at < ${p.prevEndEx}::date) AS prev
         FROM users WHERE is_admin = false`,
     sql`SELECT
-          COUNT(*) FILTER (WHERE last_active_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d1})
-                             AND last_active_at <  CURRENT_DATE + INTERVAL '1 day')                                           AS cur,
-          COUNT(*) FILTER (WHERE last_active_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d2})
-                             AND last_active_at <  CURRENT_DATE - (INTERVAL '1 day' * ${d1}))                                 AS prev
+          COUNT(*) FILTER (WHERE last_active_at >= ${p.start}::date AND last_active_at < ${p.endEx}::date)         AS cur,
+          COUNT(*) FILTER (WHERE last_active_at >= ${p.prevStart}::date AND last_active_at < ${p.prevEndEx}::date) AS prev
         FROM users WHERE is_admin = false AND is_disabled = false`,
     sql`SELECT
-          COALESCE(SUM(amount) FILTER (WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d1})
-                             AND created_at <  CURRENT_DATE + INTERVAL '1 day'), 0)                                           AS cur,
-          COALESCE(SUM(amount) FILTER (WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d2})
-                             AND created_at <  CURRENT_DATE - (INTERVAL '1 day' * ${d1})), 0)                                 AS prev
+          COALESCE(SUM(amount) FILTER (WHERE created_at >= ${p.start}::date AND created_at < ${p.endEx}::date), 0)         AS cur,
+          COALESCE(SUM(amount) FILTER (WHERE created_at >= ${p.prevStart}::date AND created_at < ${p.prevEndEx}::date), 0) AS prev
         FROM purchases WHERE payment_status = 'paid'`,
     sql`SELECT
-          COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d1})
-                             AND created_at <  CURRENT_DATE + INTERVAL '1 day')                                               AS cur,
-          COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d2})
-                             AND created_at <  CURRENT_DATE - (INTERVAL '1 day' * ${d1}))                                     AS prev
+          COUNT(*) FILTER (WHERE created_at >= ${p.start}::date AND created_at < ${p.endEx}::date)         AS cur,
+          COUNT(*) FILTER (WHERE created_at >= ${p.prevStart}::date AND created_at < ${p.prevEndEx}::date) AS prev
         FROM likes WHERE is_match = true`,
     sql`SELECT
-          COUNT(*) FILTER (WHERE status = 'active')                                                                           AS cur,
-          COUNT(*) FILTER (WHERE status = 'active' AND created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d1})
-                             AND created_at <  CURRENT_DATE + INTERVAL '1 day')                                               AS new_in_period
+          COUNT(*) FILTER (WHERE status = 'active')                                                                AS cur,
+          COUNT(*) FILTER (WHERE status = 'active' AND created_at >= ${p.start}::date AND created_at < ${p.endEx}::date) AS new_in_period
         FROM user_subscriptions`,
     sql`SELECT
-          COUNT(*) FILTER (WHERE u.is_admin = false)                                                                          AS total_users,
-          COUNT(DISTINCT s.user_id)                                                                                           AS paying
+          COUNT(*) FILTER (WHERE u.is_admin = false)  AS total_users,
+          COUNT(DISTINCT s.user_id)                   AS paying
         FROM users u LEFT JOIN user_subscriptions s ON s.user_id = u.id AND s.status = 'active'`,
   ]);
 
   const totalUsers = num(conversion[0].total_users);
   const paying = num(conversion[0].paying);
-  const periodWord = days === 1 ? "today" : "in period";
+  const pv = (v: number) => (p.hasPrev ? v : null);
 
   return {
-    days,
+    period: meta(p),
     tiles: [
-      { key: "signups", label: "New sign-ups", value: num(signups[0].cur), prev: num(signups[0].prev), format: "int" },
-      { key: "active", label: "Active users", value: num(active[0].cur), prev: num(active[0].prev), format: "int" },
-      { key: "matches", label: "New matches", value: num(matches[0].cur), prev: num(matches[0].prev), format: "int" },
-      { key: "revenue", label: "Revenue", value: num(revenue[0].cur), prev: num(revenue[0].prev), format: "money" },
-      { key: "subs", label: "Active subscribers", value: num(subs[0].cur), prev: null, sub: `+${num(subs[0].new_in_period)} new ${periodWord}`, format: "int" },
+      { key: "signups", label: "New sign-ups", value: num(signups[0].cur), prev: pv(num(signups[0].prev)), format: "int" },
+      { key: "active", label: "Active users", value: num(active[0].cur), prev: pv(num(active[0].prev)), format: "int" },
+      { key: "matches", label: "New matches", value: num(matches[0].cur), prev: pv(num(matches[0].prev)), format: "int" },
+      { key: "revenue", label: "Revenue (one-time)", value: num(revenue[0].cur), prev: pv(num(revenue[0].prev)), format: "money" },
+      { key: "subs", label: "Active subscribers", value: num(subs[0].cur), prev: null, sub: `+${num(subs[0].new_in_period)} new in period`, format: "int" },
       { key: "conversion", label: "Free → paid", value: totalUsers ? (100 * paying) / totalUsers : 0, prev: null, sub: `${paying} of ${totalUsers.toLocaleString()} users`, format: "pct" },
     ],
   };
@@ -70,23 +60,22 @@ export async function getOverview(daysIn: unknown) {
 /* ------------------------------------------------------------------ */
 /* GROWTH — daily sign-up trend + source mix                          */
 /* ------------------------------------------------------------------ */
-export async function getGrowth(daysIn: unknown) {
-  const days = clampDays(daysIn, [1, 7, 14, 30, 90]);
-  const d1 = days - 1; // window start offset so days=1 means just today
+export async function getGrowth(params: PeriodInput) {
+  const p = resolvePeriod(params, [1, 7, 14, 30, 90], 30);
 
   const [trend, sources] = await Promise.all([
     sql`SELECT created_at::date AS date, COUNT(*) AS signups
         FROM users
-        WHERE is_admin = false AND created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d1})
+        WHERE is_admin = false AND created_at >= ${p.start}::date AND created_at < ${p.endEx}::date
         GROUP BY created_at::date ORDER BY date`,
     sql`SELECT COALESCE(register_source::text, 'unknown') AS source, COUNT(*) AS signups
         FROM users
-        WHERE is_admin = false AND created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d1})
+        WHERE is_admin = false AND created_at >= ${p.start}::date AND created_at < ${p.endEx}::date
         GROUP BY 1 ORDER BY signups DESC`,
   ]);
 
   return {
-    days,
+    period: meta(p),
     trend: trend.map((r) => ({ date: String(r.date).slice(0, 10), signups: num(r.signups) })),
     sources: sources.map((r) => ({ source: r.source as string, signups: num(r.signups) })),
   };
@@ -95,18 +84,13 @@ export async function getGrowth(daysIn: unknown) {
 /* ------------------------------------------------------------------ */
 /* FUNNEL — register → complete → like → match → message + completion  */
 /* ------------------------------------------------------------------ */
-export async function getFunnel(daysIn: unknown) {
-  const days = clampDays(daysIn, [1, 7, 28, 90], 28);
-  // current cohort registered in [today-(days-1), today]; previous = the equal
-  // window immediately before it, so each stage can be compared like-for-like.
-  const d1 = days - 1;
-  const d2 = 2 * days - 1;
+export async function getFunnel(params: PeriodInput) {
+  const p = resolvePeriod(params, [1, 7, 28, 90], 28);
 
   const [cur, prev, completion] = await Promise.all([
     sql`WITH cohort AS (
           SELECT id FROM users WHERE is_admin = false
-            AND created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d1})
-            AND created_at <  CURRENT_DATE + INTERVAL '1 day'
+            AND created_at >= ${p.start}::date AND created_at < ${p.endEx}::date
         )
         SELECT
           COUNT(DISTINCT c.id)                              AS registered,
@@ -121,8 +105,7 @@ export async function getFunnel(daysIn: unknown) {
         LEFT JOIN messages msg ON msg.sender_id = c.id AND msg.message_type = 'user'`,
     sql`WITH cohort AS (
           SELECT id FROM users WHERE is_admin = false
-            AND created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d2})
-            AND created_at <  CURRENT_DATE - (INTERVAL '1 day' * ${d1})
+            AND created_at >= ${p.prevStart}::date AND created_at < ${p.prevEndEx}::date
         )
         SELECT
           COUNT(DISTINCT c.id)                              AS registered,
@@ -143,7 +126,7 @@ export async function getFunnel(daysIn: unknown) {
   ]);
 
   const c = cur[0];
-  const pv = prev[0];
+  const pvRow = prev[0];
   const defs: [string, string][] = [
     ["Registered", "registered"],
     ["Completed profile", "completed_profile"],
@@ -151,10 +134,10 @@ export async function getFunnel(daysIn: unknown) {
     ["Got a match", "got_a_match"],
     ["Sent a message", "sent_a_message"],
   ];
-  const stages = defs.map(([stage, key]) => ({ stage, users: num(c[key]), prevUsers: num(pv[key]) }));
+  const stages = defs.map(([stage, key]) => ({ stage, users: num(c[key]), prevUsers: num(pvRow[key]) }));
   const top = stages[0].users || 1;
   return {
-    days,
+    period: meta(p),
     stages: stages.map((s, i) => ({
       ...s,
       pctOfTop: Math.round((100 * s.users) / top),
@@ -167,14 +150,13 @@ export async function getFunnel(daysIn: unknown) {
 /* ------------------------------------------------------------------ */
 /* ENGAGEMENT — match→convo, retention, swipe volume                   */
 /* ------------------------------------------------------------------ */
-export async function getEngagement(daysIn: unknown) {
-  const days = clampDays(daysIn, [1, 7, 30, 90]);
-  const d1 = days - 1; // window start offset so days=1 means just today
+export async function getEngagement(params: PeriodInput) {
+  const p = resolvePeriod(params, [1, 7, 30, 90], 30);
 
   const [convo, retention, swipes] = await Promise.all([
     sql`WITH recent_matches AS (
           SELECT liker_id, liked_id FROM likes
-          WHERE is_match = true AND created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d1})
+          WHERE is_match = true AND created_at >= ${p.start}::date AND created_at < ${p.endEx}::date
         )
         SELECT COUNT(*) AS matches,
           COUNT(*) FILTER (WHERE EXISTS (
@@ -193,14 +175,14 @@ export async function getEngagement(daysIn: unknown) {
         FROM users WHERE is_admin=false AND created_at::date = CURRENT_DATE - 30`,
     sql`SELECT COALESCE(SUM(swipes_count),0) AS swipes, COALESCE(SUM(likes_count),0) AS likes,
           COALESCE(SUM(passes_count),0) AS passes
-        FROM daily_actions WHERE action_date >= CURRENT_DATE - (INTERVAL '1 day' * ${d1})`,
+        FROM daily_actions WHERE action_date >= ${p.start}::date AND action_date < ${p.endEx}::date`,
   ]);
 
   const matches = num(convo[0].matches);
   const talked = num(convo[0].talked);
   const sw = swipes[0];
   return {
-    days,
+    period: meta(p),
     matchConvo: { matches, talked, dead: matches - talked, pct: matches ? Math.round((1000 * talked) / matches) / 10 : 0 },
     retention: retention.map((r) => ({ cohort: r.cohort as string, size: num(r.size), pct: num(r.pct) })),
     swipes: {
@@ -256,9 +238,8 @@ export async function getLiquidity(minUsersIn: unknown, limitIn: unknown, gender
 /* ------------------------------------------------------------------ */
 /* MONETIZATION — revenue, plans, conversion, offers, payment health   */
 /* ------------------------------------------------------------------ */
-export async function getMonetization(daysIn: unknown) {
-  const days = clampDays(daysIn, [1, 7, 14, 30, 90], 30);
-  const d1 = days - 1; // window start offset so days=1 means just today
+export async function getMonetization(params: PeriodInput) {
+  const p = resolvePeriod(params, [1, 7, 14, 30, 90], 30);
 
   // Unified revenue: subscription payments (first-per-subscription = new, later = renewal)
   // + one-time purchases split by service type. The txns CTE is repeated inline in the
@@ -275,7 +256,7 @@ export async function getMonetization(daysIn: unknown) {
           FROM purchases pu JOIN one_time_services ots ON ots.id = pu.service_id WHERE pu.payment_status = 'paid'
         )
         SELECT type, COUNT(*) AS transactions, COALESCE(SUM(amount),0) AS revenue
-        FROM txns WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d1})
+        FROM txns WHERE created_at >= ${p.start}::date AND created_at < ${p.endEx}::date
         GROUP BY type ORDER BY revenue DESC`,
     sql`WITH txns AS (
           SELECT sp.created_at, sp.amount
@@ -285,7 +266,7 @@ export async function getMonetization(daysIn: unknown) {
           FROM purchases pu WHERE pu.payment_status = 'paid'
         )
         SELECT created_at::date AS date, COALESCE(SUM(amount),0) AS revenue
-        FROM txns WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d1})
+        FROM txns WHERE created_at >= ${p.start}::date AND created_at < ${p.endEx}::date
         GROUP BY created_at::date ORDER BY date`,
     sql`SELECT sp.display_name, sp.price, sp.duration, COUNT(*) FILTER (WHERE us.status = 'active') AS active_subs
         FROM user_subscriptions us JOIN subscription_plans sp ON sp.id = us.plan_id
@@ -299,14 +280,14 @@ export async function getMonetization(daysIn: unknown) {
     // NOTE: in subscription_payments the success value is 'succeeded' (not 'paid').
     sql`SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE status = 'succeeded') AS succeeded,
           COUNT(*) FILTER (WHERE status <> 'succeeded') AS failed
-        FROM subscription_payments WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d1})`,
+        FROM subscription_payments WHERE created_at >= ${p.start}::date AND created_at < ${p.endEx}::date`,
   ]);
 
   const pay = payments[0];
   const revenueByType = byType.map((r) => ({ type: r.type as string, transactions: num(r.transactions), revenue: num(r.revenue) }));
   const totalRevenue = revenueByType.reduce((s, r) => s + r.revenue, 0);
   return {
-    days,
+    period: meta(p),
     revenueByType,
     totalRevenue,
     revenueTrend: trend.map((r) => ({ date: String(r.date).slice(0, 10), revenue: num(r.revenue) })),
@@ -319,9 +300,8 @@ export async function getMonetization(daysIn: unknown) {
 /* ------------------------------------------------------------------ */
 /* TRUST & SAFETY — verification, data quality, spam signals           */
 /* ------------------------------------------------------------------ */
-export async function getSafety(daysIn: unknown) {
-  const days = clampDays(daysIn, [1, 7, 14, 30, 90], 14);
-  const d1 = days - 1; // window start offset so days=1 means just today
+export async function getSafety(params: PeriodInput) {
+  const p = resolvePeriod(params, [1, 7, 14, 30, 90], 14);
 
   const [verification, quality, zeroPhotos, spam, reports, dupBios, ipMulti] = await Promise.all([
     sql`SELECT verification_status AS status, COUNT(*) AS users FROM users
@@ -337,7 +317,7 @@ export async function getSafety(daysIn: unknown) {
     sql`SELECT COUNT(*) AS n FROM profiles p JOIN users u ON u.id = p.user_id AND u.is_disabled = false
         WHERE p.bio ~* '(whats\\s?app|telegram|viber|instagram|snapchat|@[a-z0-9_]+|\\+?\\d[\\d \\-]{7,}\\d)'`,
     sql`SELECT created_at::date AS date, COUNT(*) AS reports FROM profile_reports
-        WHERE created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d1}) GROUP BY created_at::date ORDER BY date`,
+        WHERE created_at >= ${p.start}::date AND created_at < ${p.endEx}::date GROUP BY created_at::date ORDER BY date`,
     sql`SELECT p.bio, COUNT(*) AS num FROM profiles p JOIN users u ON u.id = p.user_id AND u.is_disabled = false
         WHERE p.bio IS NOT NULL AND LENGTH(TRIM(p.bio)) > 15 GROUP BY p.bio HAVING COUNT(*) > 1 ORDER BY num DESC LIMIT 10`,
     sql`SELECT il.ip_address, COUNT(DISTINCT il.user_id) AS accounts FROM ip_logs il
@@ -346,7 +326,7 @@ export async function getSafety(daysIn: unknown) {
 
   const q = quality[0];
   return {
-    days,
+    period: meta(p),
     verification: verification.map((r) => ({ status: (r.status as string) || "unknown", users: num(r.users) })),
     quality: {
       complete: num(q.complete),

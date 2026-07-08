@@ -150,6 +150,19 @@ a { color: inherit; }
 .segmented button.active { background: var(--surface-1); color: var(--text-primary); box-shadow: var(--shadow); }
 .filter-label { font-size: 12px; color: var(--text-muted); font-weight: 600; margin-right: 2px; }
 
+.period-filter { flex-wrap: wrap; justify-content: flex-end; }
+.daterange { display: flex; align-items: center; gap: 6px; }
+.daterange input[type="date"] {
+  font-family: var(--font); font-size: 12.5px; padding: 5px 8px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface-1); color: var(--text-primary); color-scheme: light;
+}
+.daterange .apply {
+  border: 0; background: var(--accent); color: #fff; font-weight: 700; font-size: 12.5px;
+  padding: 6px 13px; border-radius: 8px; cursor: pointer;
+}
+.daterange .apply:disabled { opacity: 0.45; cursor: not-allowed; }
+
 /* ---------- Table ---------- */
 .tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .tbl th {

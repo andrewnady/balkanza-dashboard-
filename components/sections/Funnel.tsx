@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMetrics, Segmented, SectionHead, CardSkeleton, ErrorNote, fmtInt, fmtPct } from "../ui/primitives";
+import { useMetrics, PeriodFilter, PeriodValue, SectionHead, CardSkeleton, ErrorNote, fmtInt, fmtPct } from "../ui/primitives";
 import { HBars, TrendLine } from "../ui/charts";
 
 const RANGES = [
@@ -14,7 +14,8 @@ const RANGES = [
 // ordinal blue ramp (dark → light not allowed below step 250 on light surface)
 const FUNNEL_COLORS = ["#184f95", "#256abf", "#3987e5", "#5598e7", "#86b6ef"];
 
-function Delta({ cur, prev }: { cur: number; prev: number }) {
+function Delta({ cur, prev, hasPrev }: { cur: number; prev: number; hasPrev: boolean }) {
+  if (!hasPrev) return <span className="delta flat">—</span>;
   if (prev === 0) return <span className="delta flat">{cur > 0 ? "new" : "–"}</span>;
   const pct = (100 * (cur - prev)) / prev;
   const up = cur >= prev;
@@ -26,9 +27,10 @@ function Delta({ cur, prev }: { cur: number; prev: number }) {
 }
 
 export default function Funnel() {
-  const [days, setDays] = useState<number>(28);
-  const { data, error, loading } = useMetrics<any>("funnel", { days });
-  const prevLabel = days === 1 ? "yesterday" : `prev ${days}d`;
+  const [period, setPeriod] = useState<PeriodValue>({ days: 28 });
+  const { data, error, loading } = useMetrics<any>("funnel", period);
+  const hasPrev = data?.period?.hasPrev ?? true;
+  const prevLabel = data?.period?.prevLabel ?? "prev";
 
   return (
     <section className="section" id="funnel">
@@ -38,7 +40,7 @@ export default function Funnel() {
         desc="For users who registered in the window: how far they get down register → complete → like → match → message — compared to the same period before."
       >
         <span className="filter-label">Cohort</span>
-        <Segmented value={days} options={RANGES} onChange={setDays} />
+        <PeriodFilter presets={RANGES} value={period} onChange={setPeriod} />
       </SectionHead>
 
       {error ? (
@@ -75,8 +77,8 @@ export default function Funnel() {
                             {s.stage}
                           </td>
                           <td className="num" style={{ fontWeight: 700 }}>{fmtInt(s.users)}</td>
-                          <td className="num muted">{fmtInt(s.prevUsers)}</td>
-                          <td className="num"><Delta cur={s.users} prev={s.prevUsers} /></td>
+                          <td className="num muted">{hasPrev ? fmtInt(s.prevUsers) : "—"}</td>
+                          <td className="num"><Delta cur={s.users} prev={s.prevUsers} hasPrev={hasPrev} /></td>
                           <td className="num muted">{fmtPct(s.pctOfTop)}</td>
                           <td className="num muted">{i === 0 ? "—" : fmtPct(s.stepConversion)}</td>
                         </tr>

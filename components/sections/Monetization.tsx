@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMetrics, Segmented, SectionHead, CardSkeleton, ErrorNote, StatTile, fmtInt, fmtMoney, fmtPct } from "../ui/primitives";
+import { useMetrics, PeriodFilter, PeriodValue, periodLabel, SectionHead, CardSkeleton, ErrorNote, StatTile, fmtInt, fmtMoney, fmtPct } from "../ui/primitives";
 import { TrendArea } from "../ui/charts";
 
 const RANGES = [
@@ -22,14 +22,15 @@ const TYPE_COLORS: Record<string, string> = {
 };
 
 export default function Monetization() {
-  const [days, setDays] = useState<number>(30);
-  const { data, error, loading } = useMetrics<any>("monetization", { days });
+  const [period, setPeriod] = useState<PeriodValue>({ days: 30 });
+  const { data, error, loading } = useMetrics<any>("monetization", period);
+  const label = periodLabel(period);
 
   return (
     <section className="section" id="monetization">
       <SectionHead id="monetization-h" title="Monetization" desc="Revenue, subscriptions, offers and payment health.">
         <span className="filter-label">Window</span>
-        <Segmented value={days} options={RANGES} onChange={setDays} />
+        <PeriodFilter presets={RANGES} value={period} onChange={setPeriod} />
       </SectionHead>
 
       {error ? (
@@ -61,7 +62,7 @@ export default function Monetization() {
               <TrendArea data={data.revenueTrend} xKey="date" yKey="revenue" color="var(--series-4)" valueFmt={fmtMoney} height={190} />
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <StatTile label="Total revenue" value={data.totalRevenue} sub={`${days === 1 ? "today" : `last ${days} days`}`} format="money" />
+              <StatTile label="Total revenue" value={data.totalRevenue} sub={label} format="money" />
               <StatTile
                 label="Subscription payment success"
                 value={data.payments.total ? 100 - data.payments.failRate : 0}
@@ -73,7 +74,7 @@ export default function Monetization() {
 
           <div className="grid grid-2">
             <div className="card">
-              <p className="card-title">Revenue by service ({days === 1 ? "today" : `${days}d`})</p>
+              <p className="card-title">Revenue by service · {label}</p>
               <p className="card-note">Subscriptions, renewals, roses, super likes &amp; boosts.</p>
               {data.revenueByType.length === 0 ? (
                 <p className="muted" style={{ fontSize: 13 }}>No revenue in this window.</p>

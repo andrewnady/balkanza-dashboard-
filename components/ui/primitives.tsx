@@ -74,6 +74,67 @@ export function Segmented<T extends string | number>({
   );
 }
 
+/* ---------- period filter (presets + all time + custom range) ---------- */
+export type PeriodValue = { days?: number; range?: "all"; from?: string; to?: string };
+
+export function periodLabel(v: PeriodValue): string {
+  if (v.range === "all") return "all time";
+  if (v.from && v.to) return `${v.from} → ${v.to}`;
+  if (v.days === 1) return "today";
+  return `last ${v.days} days`;
+}
+
+export function PeriodFilter({
+  presets,
+  value,
+  onChange,
+}: {
+  presets: { label: string; value: number }[];
+  value: PeriodValue;
+  onChange: (v: PeriodValue) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [from, setFrom] = useState(value.from || "");
+  const [to, setTo] = useState(value.to || "");
+  const isDays = (d: number) => value.days === d && !value.range && !value.from;
+  const isCustom = !!(value.from && value.to);
+
+  return (
+    <div className="filters period-filter">
+      <div className="segmented">
+        {presets.map((pr) => (
+          <button key={pr.value} className={isDays(pr.value) ? "active" : ""} onClick={() => onChange({ days: pr.value })}>
+            {pr.label}
+          </button>
+        ))}
+        <button className={value.range === "all" ? "active" : ""} onClick={() => onChange({ range: "all" })}>
+          All time
+        </button>
+        <button className={isCustom || open ? "active" : ""} onClick={() => setOpen((o) => !o)}>
+          Custom
+        </button>
+      </div>
+      {open && (
+        <div className="daterange">
+          <input type="date" aria-label="From" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} />
+          <span className="muted">→</span>
+          <input type="date" aria-label="To" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} />
+          <button
+            className="apply"
+            disabled={!from || !to || from > to}
+            onClick={() => {
+              onChange({ from, to });
+              setOpen(false);
+            }}
+          >
+            Apply
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ---------- stat tile ---------- */
 export function StatTile({
   label,

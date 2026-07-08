@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMetrics, Segmented, SectionHead, CardSkeleton, ErrorNote, fmtInt } from "../ui/primitives";
+import { useMetrics, PeriodFilter, PeriodValue, periodLabel, SectionHead, CardSkeleton, ErrorNote, fmtInt } from "../ui/primitives";
 import { TrendArea, HBars, SERIES } from "../ui/charts";
 
 const RANGES = [
@@ -13,14 +13,14 @@ const RANGES = [
 ];
 
 export default function Growth() {
-  const [days, setDays] = useState<number>(30);
-  const { data, error, loading } = useMetrics<any>("growth", { days });
+  const [period, setPeriod] = useState<PeriodValue>({ days: 30 });
+  const { data, error, loading } = useMetrics<any>("growth", period);
 
   return (
     <section className="section" id="growth">
       <SectionHead id="growth-h" title="Growth & acquisition" desc="Daily registrations over time and where they come from.">
         <span className="filter-label">Window</span>
-        <Segmented value={days} options={RANGES} onChange={setDays} />
+        <PeriodFilter presets={RANGES} value={period} onChange={setPeriod} />
       </SectionHead>
 
       {error ? (
@@ -29,7 +29,7 @@ export default function Growth() {
         <div className="grid grid-3">
           <div className="card col-span-2">
             <p className="card-title">Sign-ups per day</p>
-            <p className="card-note">New non-admin registrations, {days === 1 ? "today" : `last ${days} days`}.</p>
+            <p className="card-note">New non-admin registrations, {periodLabel(period)}.</p>
             {loading || !data ? <CardSkeleton height={220} /> : <TrendArea data={data.trend} xKey="date" yKey="signups" valueFmt={fmtInt} />}
           </div>
           <div className="card">

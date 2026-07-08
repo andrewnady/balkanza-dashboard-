@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMetrics, Segmented, SectionHead, CardSkeleton, ErrorNote, StatTile, fmtInt, fmtPct } from "../ui/primitives";
+import { useMetrics, PeriodFilter, PeriodValue, periodLabel, SectionHead, CardSkeleton, ErrorNote, StatTile, fmtInt, fmtPct } from "../ui/primitives";
 import { HBars, TrendArea } from "../ui/charts";
 
 const RANGES = [
@@ -20,8 +20,9 @@ const VERIF_COLORS: Record<string, string> = {
 };
 
 export default function Safety() {
-  const [days, setDays] = useState<number>(14);
-  const { data, error, loading } = useMetrics<any>("safety", { days });
+  const [period, setPeriod] = useState<PeriodValue>({ days: 14 });
+  const { data, error, loading } = useMetrics<any>("safety", period);
+  const label = periodLabel(period);
 
   const heritagePct = data && data.quality.complete ? (100 * data.quality.missing_heritage) / data.quality.complete : 0;
 
@@ -29,7 +30,7 @@ export default function Safety() {
     <section className="section" id="safety">
       <SectionHead id="safety-h" title="Trust, safety & data quality" desc="Spam signals, verification, and gaps in critical profile data.">
         <span className="filter-label">Reports window</span>
-        <Segmented value={days} options={RANGES} onChange={setDays} />
+        <PeriodFilter presets={RANGES} value={period} onChange={setPeriod} />
       </SectionHead>
 
       {error ? (
@@ -72,7 +73,7 @@ export default function Safety() {
               />
             </div>
             <div className="card">
-              <p className="card-title">Report volume ({days}d)</p>
+              <p className="card-title">Report volume · {label}</p>
               <p className="card-note">Profile reports filed per day.</p>
               {data.reports.length === 0 ? (
                 <p className="muted" style={{ fontSize: 13 }}>No reports in this window.</p>
