@@ -168,12 +168,13 @@ export async function getFunnel(daysIn: unknown) {
 /* ENGAGEMENT — match→convo, retention, swipe volume                   */
 /* ------------------------------------------------------------------ */
 export async function getEngagement(daysIn: unknown) {
-  const days = clampDays(daysIn, [7, 30, 90]);
+  const days = clampDays(daysIn, [1, 7, 30, 90]);
+  const d1 = days - 1; // window start offset so days=1 means just today
 
   const [convo, retention, swipes] = await Promise.all([
     sql`WITH recent_matches AS (
           SELECT liker_id, liked_id FROM likes
-          WHERE is_match = true AND created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${days})
+          WHERE is_match = true AND created_at >= CURRENT_DATE - (INTERVAL '1 day' * ${d1})
         )
         SELECT COUNT(*) AS matches,
           COUNT(*) FILTER (WHERE EXISTS (
@@ -192,7 +193,7 @@ export async function getEngagement(daysIn: unknown) {
         FROM users WHERE is_admin=false AND created_at::date = CURRENT_DATE - 30`,
     sql`SELECT COALESCE(SUM(swipes_count),0) AS swipes, COALESCE(SUM(likes_count),0) AS likes,
           COALESCE(SUM(passes_count),0) AS passes
-        FROM daily_actions WHERE action_date >= CURRENT_DATE - (INTERVAL '1 day' * ${days})`,
+        FROM daily_actions WHERE action_date >= CURRENT_DATE - (INTERVAL '1 day' * ${d1})`,
   ]);
 
   const matches = num(convo[0].matches);
