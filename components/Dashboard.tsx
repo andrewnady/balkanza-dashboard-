@@ -52,17 +52,28 @@ export default function Dashboard() {
             <span className="brand-divider" />
             <span className="brand-sub">Product Dashboard</span>
           </div>
-          <div className="meta">
-            {fetchedAt ? (
-              <>
-                Live from production ·{" "}
-                <strong>
-                  {new Date(fetchedAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}
-                </strong>
-              </>
-            ) : (
-              "Connecting…"
-            )}
+          <div className="meta" style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span>
+              {fetchedAt ? (
+                <>
+                  Live from production ·{" "}
+                  <strong>
+                    {new Date(fetchedAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}
+                  </strong>
+                </>
+              ) : (
+                "Connecting…"
+              )}
+            </span>
+            <button
+              className="logout-link"
+              onClick={async () => {
+                await fetch("/api/auth/logout", { method: "POST" });
+                window.location.href = "/login";
+              }}
+            >
+              Log out
+            </button>
           </div>
         </div>
       </header>
