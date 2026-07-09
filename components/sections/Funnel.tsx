@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMetrics, PeriodFilter, PeriodValue, SectionHead, CardSkeleton, ErrorNote, fmtInt, fmtPct } from "../ui/primitives";
+import { useMetrics, SESSION_ASOF, PeriodFilter, PeriodValue, SectionHead, CardSkeleton, ErrorNote, fmtInt, fmtPct } from "../ui/primitives";
 import { HBars, TrendLine } from "../ui/charts";
 
 const RANGES = [
@@ -85,7 +85,7 @@ export default function Funnel() {
                     </thead>
                     <tbody>
                       {data.stages.map((s: any, i: number) => {
-                        const href = `/users?type=${STAGE_TYPE[s.stage] || "signups"}&${periodQuery(period)}`;
+                        const href = `/users?type=${STAGE_TYPE[s.stage] || "signups"}&${periodQuery(period)}&asof=${encodeURIComponent(SESSION_ASOF)}`;
                         return (
                         <tr key={s.stage} className="row-link" onClick={() => { window.location.href = href; }}>
                           <td style={{ fontWeight: 600 }}>

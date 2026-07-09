@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMetrics, PeriodFilter, PeriodValue, SectionHead, CardSkeleton, ErrorNote, StatTile, fmtInt, fmtPct } from "../ui/primitives";
+import { useMetrics, SESSION_ASOF, PeriodFilter, PeriodValue, SectionHead, CardSkeleton, ErrorNote, StatTile, fmtInt, fmtPct } from "../ui/primitives";
 import { HBars } from "../ui/charts";
 
 const RANGES = [
@@ -20,7 +20,7 @@ function periodQuery(v: PeriodValue): string {
 export default function Engagement() {
   const [period, setPeriod] = useState<PeriodValue>({ days: 1 });
   const { data, error, loading } = useMetrics<any>("engagement", period);
-  const matchesHref = (type: string) => `/matches?type=${type}&${periodQuery(period)}`;
+  const matchesHref = (type: string) => `/matches?type=${type}&${periodQuery(period)}&asof=${encodeURIComponent(SESSION_ASOF)}`;
 
   return (
     <section className="section" id="engagement">

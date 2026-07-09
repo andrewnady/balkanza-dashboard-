@@ -16,6 +16,10 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Neon's driver talks over fetch(), which Next caches by default — that made
+// different sections read stale, mismatched counts. Force every query fresh.
+export const fetchCache = "force-no-store";
+export const revalidate = 0;
 export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
@@ -26,6 +30,7 @@ export async function GET(req: NextRequest) {
     range: searchParams.get("range"),
     from: searchParams.get("from"),
     to: searchParams.get("to"),
+    asof: searchParams.get("asof"),
   };
 
   if (!process.env.DATABASE_URL) {

@@ -16,7 +16,7 @@
 
 export const DAY_START_HOUR = 0; // logical day starts at midnight UTC
 
-export type PeriodInput = { days?: unknown; range?: unknown; from?: unknown; to?: unknown };
+export type PeriodInput = { days?: unknown; range?: unknown; from?: unknown; to?: unknown; asof?: unknown };
 
 export interface Period {
   mode: "days" | "all" | "custom";
@@ -60,6 +60,15 @@ function isValidDate(s: unknown): s is string {
   return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s + "T00:00:00Z"));
 }
 
+// Cap the (future-reaching) upper bound at the page snapshot instant so the
+// current, still-accumulating period is frozen and consistent across the page.
+function capAsof(endEx: string, asof: unknown): string {
+  if (typeof asof === "string" && /^\d{4}-\d{2}-\d{2}T/.test(asof) && !Number.isNaN(Date.parse(asof))) {
+    if (Date.parse(asof) < Date.parse(endEx)) return asof;
+  }
+  return endEx;
+}
+
 export function resolvePeriod(input: PeriodInput, allowed: number[], fallback: number): Period {
   const today = logicalToday();
   const endTodayDate = addDays(today, 1); // exclusive upper bound (tomorrow's logical start)
@@ -70,7 +79,7 @@ export function resolvePeriod(input: PeriodInput, allowed: number[], fallback: n
       mode: "all",
       days: daysBetween(ALL_TIME_START_DATE, endTodayDate),
       start: ALL_TIME_START_TS,
-      endEx: tsAt(endTodayDate),
+      endEx: capAsof(tsAt(endTodayDate), input.asof),
       startDate: ALL_TIME_START_DATE,
       endExDate: endTodayDate,
       hasPrev: false,
@@ -91,7 +100,7 @@ export function resolvePeriod(input: PeriodInput, allowed: number[], fallback: n
       mode: "custom",
       days: len,
       start: tsAt(startDate),
-      endEx: tsAt(endExDate),
+      endEx: capAsof(tsAt(endExDate), input.asof),
       startDate,
       endExDate,
       hasPrev: true,

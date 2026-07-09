@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMetrics, PeriodFilter, PeriodValue, StatTile, SectionHead, CardSkeleton, ErrorNote } from "../ui/primitives";
+import { useMetrics, SESSION_ASOF, PeriodFilter, PeriodValue, StatTile, SectionHead, CardSkeleton, ErrorNote } from "../ui/primitives";
 
 const RANGES = [
   { label: "Today", value: 1 },
@@ -22,7 +22,7 @@ export default function Overview({ onFetched }: { onFetched?: (t: string | null)
 
   if (onFetched && fetchedAt) onFetched(fetchedAt);
 
-  const qp = periodQuery(period);
+  const qp = `${periodQuery(period)}&asof=${encodeURIComponent(SESSION_ASOF)}`;
   const hrefFor = (key: string): string | undefined =>
     key === "signups" ? `/users?type=signups&${qp}`
       : key === "active" ? `/users?type=active&${qp}`

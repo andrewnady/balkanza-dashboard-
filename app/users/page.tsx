@@ -27,7 +27,7 @@ function UsersContent() {
   const sp = useSearchParams();
   const type = sp.get("type") && TITLES[sp.get("type") as string] ? (sp.get("type") as string) : "signups";
   const params: Record<string, string> = {};
-  (["type", "days", "range", "from", "to"] as const).forEach((k) => {
+  (["type", "days", "range", "from", "to", "asof"] as const).forEach((k) => {
     const v = sp.get(k);
     if (v) params[k] = v;
   });

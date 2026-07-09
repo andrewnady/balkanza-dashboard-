@@ -15,13 +15,21 @@ export function formatValue(v: number, format?: string) {
 }
 
 /* ---------- data fetching hook ---------- */
+// One snapshot instant per page load. Every metric on the page — and the
+// drill-downs opened from it (which pass this value through the URL) — is
+// computed "as of" this moment, so a tile and its list never drift as the
+// current day keeps accumulating.
+export const SESSION_ASOF = new Date().toISOString();
+
 export function useMetrics<T = any>(section: string, params: Record<string, string | number> = {}) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
 
-  const qs = new URLSearchParams({ section, ...Object.fromEntries(Object.entries(params).map(([k, v]) => [k, String(v)])) }).toString();
+  const merged: Record<string, string | number> = { section, ...params };
+  if (!("asof" in merged)) merged.asof = SESSION_ASOF;
+  const qs = new URLSearchParams(Object.fromEntries(Object.entries(merged).map(([k, v]) => [k, String(v)]))).toString();
 
   const load = useCallback(async () => {
     setLoading(true);
