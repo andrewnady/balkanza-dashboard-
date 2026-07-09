@@ -35,19 +35,29 @@ export async function getOverview(params: PeriodInput) {
           COUNT(*) FILTER (WHERE created_at >= ${p.start}::date AND created_at < ${p.endEx}::date)         AS cur,
           COUNT(*) FILTER (WHERE created_at >= ${p.prevStart}::date AND created_at < ${p.prevEndEx}::date) AS prev
         FROM likes WHERE is_match = true`,
+    // New subscriptions started in the period (+ total active for context).
     sql`SELECT
-          COUNT(*) FILTER (WHERE status = 'active')                                                                AS cur,
-          COUNT(*) FILTER (WHERE status = 'active' AND created_at >= ${p.start}::date AND created_at < ${p.endEx}::date) AS new_in_period
+          COUNT(*) FILTER (WHERE created_at >= ${p.start}::date AND created_at < ${p.endEx}::date)         AS cur,
+          COUNT(*) FILTER (WHERE created_at >= ${p.prevStart}::date AND created_at < ${p.prevEndEx}::date) AS prev,
+          COUNT(*) FILTER (WHERE status = 'active')                                                        AS total_active
         FROM user_subscriptions`,
+    // Free→paid for the period's signup cohort: of users who signed up in the
+    // window, how many are paying (have an active subscription).
     sql`SELECT
-          COUNT(*) FILTER (WHERE u.is_admin = false)  AS total_users,
-          COUNT(DISTINCT s.user_id)                   AS paying
-        FROM users u LEFT JOIN user_subscriptions s ON s.user_id = u.id AND s.status = 'active'`,
+          COUNT(*) FILTER (WHERE u.created_at >= ${p.start}::date AND u.created_at < ${p.endEx}::date)                              AS signups_cur,
+          COUNT(*) FILTER (WHERE u.created_at >= ${p.start}::date AND u.created_at < ${p.endEx}::date AND s.user_id IS NOT NULL)     AS paid_cur,
+          COUNT(*) FILTER (WHERE u.created_at >= ${p.prevStart}::date AND u.created_at < ${p.prevEndEx}::date)                       AS signups_prev,
+          COUNT(*) FILTER (WHERE u.created_at >= ${p.prevStart}::date AND u.created_at < ${p.prevEndEx}::date AND s.user_id IS NOT NULL) AS paid_prev
+        FROM users u
+        LEFT JOIN (SELECT DISTINCT user_id FROM user_subscriptions WHERE status = 'active') s ON s.user_id = u.id
+        WHERE u.is_admin = false`,
   ]);
 
-  const totalUsers = num(conversion[0].total_users);
-  const paying = num(conversion[0].paying);
   const pv = (v: number) => (p.hasPrev ? v : null);
+  const totalActive = num(subs[0].total_active);
+  const cv = conversion[0];
+  const convCur = num(cv.signups_cur) ? (100 * num(cv.paid_cur)) / num(cv.signups_cur) : 0;
+  const convPrev = num(cv.signups_prev) ? (100 * num(cv.paid_prev)) / num(cv.signups_prev) : 0;
 
   return {
     period: meta(p),
@@ -56,11 +66,13 @@ export async function getOverview(params: PeriodInput) {
       { key: "active", label: "Active users", value: num(active[0].cur), prev: pv(num(active[0].prev)), format: "int" },
       { key: "matches", label: "New matches", value: num(matches[0].cur), prev: pv(num(matches[0].prev)), format: "int" },
       { key: "revenue", label: "Revenue (all sources)", value: num(revenue[0].cur), prev: pv(num(revenue[0].prev)), format: "money" },
-      { key: "subs", label: "Active subscribers", value: num(subs[0].cur), prev: null, sub: `+${num(subs[0].new_in_period)} new in period`, format: "int" },
-      { key: "conversion", label: "Free → paid", value: totalUsers ? (100 * paying) / totalUsers : 0, prev: null, sub: `${paying} of ${totalUsers.toLocaleString()} users`, format: "pct" },
+      { key: "subs", label: "New subscriptions", value: num(subs[0].cur), prev: pv(num(subs[0].prev)), sub: `${fmtIntLocal(totalActive)} active total`, format: "int" },
+      { key: "conversion", label: "Free → paid", value: convCur, prev: pv(convPrev), sub: `${num(cv.paid_cur)} of ${fmtIntLocal(num(cv.signups_cur))} signups`, format: "pct" },
     ],
   };
 }
+
+const fmtIntLocal = (n: number) => n.toLocaleString("en-US");
 
 /* ------------------------------------------------------------------ */
 /* GROWTH — daily sign-up trend + source mix                          */
