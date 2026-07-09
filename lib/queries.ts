@@ -81,7 +81,7 @@ export async function getGrowth(params: PeriodInput) {
   const p = resolvePeriod(params, [1, 7, 14, 30, 90], 30);
 
   const [trend, sources] = await Promise.all([
-    sql`SELECT (created_at - INTERVAL '3 hours')::date AS date, COUNT(*) AS signups
+    sql`SELECT created_at::date AS date, COUNT(*) AS signups
         FROM users
         WHERE is_admin = false AND created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz
         GROUP BY 1 ORDER BY 1`,
@@ -281,7 +281,7 @@ export async function getMonetization(params: PeriodInput) {
           SELECT pu.created_at, pu.amount
           FROM purchases pu WHERE pu.payment_status = 'paid'
         )
-        SELECT (created_at - INTERVAL '3 hours')::date AS date, COALESCE(SUM(amount),0) AS revenue
+        SELECT created_at::date AS date, COALESCE(SUM(amount),0) AS revenue
         FROM txns WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz
         GROUP BY 1 ORDER BY 1`,
     sql`SELECT sp.display_name, sp.price, sp.duration, COUNT(*) FILTER (WHERE us.status = 'active') AS active_subs
@@ -406,7 +406,7 @@ export async function getSafety(params: PeriodInput) {
     sql`SELECT COUNT(*) AS n FROM profiles p JOIN users u ON u.id = p.user_id AND u.is_disabled = false
         WHERE p.created_at >= ${p.start}::timestamptz AND p.created_at < ${p.endEx}::timestamptz
           AND p.bio ~* '(whats\\s?app|telegram|viber|instagram|snapchat|@[a-z0-9_]+|\\+?\\d[\\d \\-]{7,}\\d)'`,
-    sql`SELECT (created_at - INTERVAL '3 hours')::date AS date, COUNT(*) AS reports FROM profile_reports
+    sql`SELECT created_at::date AS date, COUNT(*) AS reports FROM profile_reports
         WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz GROUP BY 1 ORDER BY 1`,
     sql`SELECT p.bio, COUNT(*) AS num,
           json_agg(DISTINCT jsonb_build_object(

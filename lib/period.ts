@@ -14,7 +14,7 @@
  * timestamptz columns, and `startDate`/`endExDate` (YYYY-MM-DD) for date columns.
  */
 
-export const DAY_START_HOUR = 3; // logical day starts at 03:00 UTC
+export const DAY_START_HOUR = 0; // logical day starts at midnight UTC
 
 export type PeriodInput = { days?: unknown; range?: unknown; from?: unknown; to?: unknown };
 
