@@ -16,6 +16,15 @@ const SEG = [
   { key: "ghost", label: "Never activated", note: "no activity after signup", color: "var(--series-6)" },
 ];
 
+function Chip({ n, label }: { n: number; label: string }) {
+  return (
+    <div className="signal-chip">
+      <span className={`signal-chip-n ${n > 0 ? "on" : "off"}`}>{fmtInt(n)}</span>
+      <span className="signal-chip-label">{label}</span>
+    </div>
+  );
+}
+
 export default function Diagnostics() {
   const { data, error, loading } = useMetrics<any>("diagnostics", {});
 
@@ -144,6 +153,30 @@ export default function Diagnostics() {
               <p className="card-note" style={{ marginTop: 10 }}>
                 The notification pipeline is live, but reach is the cap — driving push opt-in is the cheapest retention win available.
               </p>
+            </div>
+          </div>
+
+          <div className="card" style={{ marginTop: 16 }}>
+            <p className="card-title">AI Matchmaker intros — adoption &amp; impact</p>
+            <p className="card-note">
+              An AI-written, heritage-themed intro feature already exists (&ldquo;You both share a deep love for Balkan…&rdquo;). Here&apos;s how it&apos;s actually performing.
+            </p>
+            <div className="signal-chips" style={{ marginTop: 6 }}>
+              <Chip n={data.aiIntros.totalMsgs} label="AI intros sent" />
+              <Chip n={data.aiIntros.senders} label="users who sent one" />
+              <Chip n={data.aiIntros.receivers} label="people reached" />
+              <Chip n={data.aiIntros.replied} label="got a reply" />
+              <Chip n={data.aiIntros.becameMatch} label="became a match" />
+            </div>
+            <div className="callout warn" style={{ marginTop: 14 }}>
+              <span className="callout-icon">⚠️</span>
+              <div>
+                <strong>Near-zero adoption, and it&apos;s the wrong shape.</strong> Only {fmtInt(data.aiIntros.senders)} users ever sent one, and just{" "}
+                <strong>{fmtPct(data.aiIntros.replyRate)}</strong> of intros got a reply ({fmtInt(data.aiIntros.replied)}/{fmtInt(data.aiIntros.pairs)}), with {fmtInt(data.aiIntros.becameMatch)} turning into a match.
+                These are <strong>cold pre-match</strong> intros to strangers — a hard ask. The post-match icebreaker idea (both people already liked each
+                other) is warmer and effectively <strong>untested</strong>. Takeaway: the heritage angle is validated, but ship icebreakers <em>on matches</em> and
+                measure them against the two-way conversation rate.
+              </div>
             </div>
           </div>
         </>

@@ -460,7 +460,7 @@ export async function getMonetization(params: PeriodInput) {
 /* DIAGNOSTICS — the leaky-bucket analysis (structural, all-time)      */
 /* ------------------------------------------------------------------ */
 export async function getDiagnostics() {
-  const [retention, ttv, dead, push] = await Promise.all([
+  const [retention, ttv, dead, push, ai] = await Promise.all([
     // Day-1 behaviour of a mature cohort (registered 7–30 days ago), split by
     // whether they're still active in the last 3 days.
     sql`WITH cohort AS (
@@ -496,6 +496,17 @@ export async function getDiagnostics() {
     // Push reach: how many users could actually be re-engaged.
     sql`SELECT (SELECT COUNT(DISTINCT user_id) FROM push_notification_tokens) AS tokens,
                (SELECT COUNT(*) FROM users WHERE is_admin=false) AS users`,
+    // AI Matchmaker intros: adoption + whether the receiver actually replied.
+    sql`WITH ai AS (SELECT DISTINCT sender_id s, receiver_id r FROM messages WHERE message_type='AI')
+        SELECT
+          (SELECT COUNT(*) FROM messages WHERE message_type='AI') AS total_msgs,
+          COUNT(*) AS pairs,
+          COUNT(DISTINCT s) AS senders,
+          COUNT(DISTINCT r) AS receivers,
+          COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM messages m2 WHERE m2.sender_id=ai.r AND m2.receiver_id=ai.s AND m2.message_type IN ('user','one_time_service'))) AS replied,
+          (SELECT COUNT(*) FROM (SELECT DISTINCT LEAST(sender_id,receiver_id) a, GREATEST(sender_id,receiver_id) b FROM messages WHERE message_type='AI') aip
+             WHERE EXISTS (SELECT 1 FROM likes l WHERE l.is_match AND LEAST(l.liker_id,l.liked_id)=aip.a AND GREATEST(l.liker_id,l.liked_id)=aip.b)) AS became_match
+        FROM ai`,
   ]);
 
   const g = (name: string) => retention.find((r) => r.grp === name) || {};
@@ -521,6 +532,15 @@ export async function getDiagnostics() {
     },
     deadMatches: { neither, oneSided, alive, total: totalMatches },
     pushReach: { tokens: num(push[0].tokens), users: num(push[0].users) },
+    aiIntros: {
+      totalMsgs: num(ai[0].total_msgs),
+      pairs: num(ai[0].pairs),
+      senders: num(ai[0].senders),
+      receivers: num(ai[0].receivers),
+      replied: num(ai[0].replied),
+      becameMatch: num(ai[0].became_match),
+      replyRate: num(ai[0].pairs) ? Math.round((1000 * num(ai[0].replied)) / num(ai[0].pairs)) / 10 : 0,
+    },
   };
 }
 
