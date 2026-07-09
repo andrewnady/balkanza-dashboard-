@@ -81,7 +81,7 @@ export default function Safety() {
   return (
     <section className="section" id="safety">
       <SectionHead id="safety-h" title="Trust, safety & data quality" desc="Spam signals, verification, and gaps in critical profile data.">
-        <span className="filter-label">Reports window</span>
+        <span className="filter-label">Window</span>
         <PeriodFilter presets={RANGES} value={period} onChange={setPeriod} />
       </SectionHead>
 
