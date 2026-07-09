@@ -35,12 +35,16 @@ export async function getOverview(params: PeriodInput) {
           COUNT(*) FILTER (WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz)         AS cur,
           COUNT(*) FILTER (WHERE created_at >= ${p.prevStart}::timestamptz AND created_at < ${p.prevEndEx}::timestamptz) AS prev
         FROM likes WHERE is_match = true`,
-    // New subscriptions started in the period (+ total active for context).
-    sql`SELECT
-          COUNT(*) FILTER (WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz)         AS cur,
-          COUNT(*) FILTER (WHERE created_at >= ${p.prevStart}::timestamptz AND created_at < ${p.prevEndEx}::timestamptz) AS prev,
-          COUNT(*) FILTER (WHERE status = 'active')                                                        AS total_active
-        FROM user_subscriptions`,
+    // New premium subscriptions = subscriptions whose FIRST successful payment
+    // lands in the period (a real paid conversion, not an unpaid subscription row).
+    sql`WITH first_paid AS (
+          SELECT subscription_id, MIN(created_at) AS fp
+          FROM subscription_payments WHERE status = 'succeeded' GROUP BY subscription_id
+        )
+        SELECT
+          COUNT(*) FILTER (WHERE fp >= ${p.start}::timestamptz AND fp < ${p.endEx}::timestamptz)         AS cur,
+          COUNT(*) FILTER (WHERE fp >= ${p.prevStart}::timestamptz AND fp < ${p.prevEndEx}::timestamptz) AS prev
+        FROM first_paid`,
     // Free→paid for the period's signup cohort: of users who signed up in the
     // window, how many are paying (have an active subscription).
     sql`SELECT
@@ -65,7 +69,7 @@ export async function getOverview(params: PeriodInput) {
       { key: "active", label: "Active users", value: num(active[0].cur), prev: pv(num(active[0].prev)), format: "int" },
       { key: "matches", label: "New matches", value: num(matches[0].cur), prev: pv(num(matches[0].prev)), format: "int" },
       { key: "revenue", label: "Revenue (all sources)", value: num(revenue[0].cur), prev: pv(num(revenue[0].prev)), format: "money" },
-      { key: "subs", label: "New subscriptions", value: num(subs[0].cur), prev: pv(num(subs[0].prev)), format: "int" },
+      { key: "subs", label: "New premium subs", value: num(subs[0].cur), prev: pv(num(subs[0].prev)), sub: "first paid subscription", format: "int" },
       { key: "conversion", label: "Free → paid", value: convCur, prev: pv(convPrev), sub: `${num(cv.paid_cur)} of ${fmtIntLocal(num(cv.signups_cur))} signups`, format: "pct" },
     ],
   };
