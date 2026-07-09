@@ -143,6 +143,7 @@ export function StatTile({
   sub,
   format,
   goodDirection = "up",
+  href,
 }: {
   label: string;
   value: number;
@@ -150,6 +151,7 @@ export function StatTile({
   sub?: string;
   format?: string;
   goodDirection?: "up" | "down";
+  href?: string;
 }) {
   let delta: React.ReactNode = null;
   if (prev !== null && prev !== undefined) {
@@ -167,13 +169,23 @@ export function StatTile({
       );
     }
   }
-  return (
-    <div className="card tile">
-      <span className="tile-label">{label}</span>
+  const inner = (
+    <>
+      <span className="tile-label">
+        {label}
+        {href ? <span className="tile-arrow">↗</span> : null}
+      </span>
       <span className="tile-value">{formatValue(value, format)}</span>
       {delta ?? (sub ? <span className="tile-sub">{sub}</span> : null)}
       {delta && sub ? <span className="tile-sub">{sub}</span> : null}
-    </div>
+    </>
+  );
+  return href ? (
+    <a className="card tile tile-link" href={href}>
+      {inner}
+    </a>
+  ) : (
+    <div className="card tile">{inner}</div>
   );
 }
 

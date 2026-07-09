@@ -215,6 +215,48 @@ export async function getEngagement(params: PeriodInput) {
 }
 
 /* ------------------------------------------------------------------ */
+/* MATCHES — drill-down list behind the Engagement tiles               */
+/* ------------------------------------------------------------------ */
+export async function getMatches(params: PeriodInput, typeIn: unknown) {
+  const p = resolvePeriod(params, [1, 7, 30, 90], 30);
+  const type = typeIn === "talked" || typeIn === "dead" ? (typeIn as string) : "all";
+
+  const rows = await sql`
+    WITH m AS (
+      SELECT LEAST(liker_id, liked_id) AS a, GREATEST(liker_id, liked_id) AS b, MIN(created_at) AS matched_at
+      FROM likes
+      WHERE is_match = true AND created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz
+      GROUP BY 1, 2
+    ),
+    msg AS (
+      SELECT LEAST(sender_id, receiver_id) AS a, GREATEST(sender_id, receiver_id) AS b, COUNT(*) AS c
+      FROM messages WHERE message_type = 'user' GROUP BY 1, 2
+    )
+    SELECT m.a, m.b, m.matched_at, msg.c AS msgs,
+      NULLIF(TRIM(COALESCE(ua.first_name,'') || ' ' || COALESCE(ua.last_name,'')), '') AS a_name, ua.email AS a_email,
+      NULLIF(TRIM(COALESCE(ub.first_name,'') || ' ' || COALESCE(ub.last_name,'')), '') AS b_name, ub.email AS b_email
+    FROM m
+    LEFT JOIN msg   ON msg.a = m.a AND msg.b = m.b
+    JOIN users ua   ON ua.id = m.a
+    JOIN users ub   ON ub.id = m.b
+    WHERE (${type} = 'all' OR (${type} = 'talked' AND msg.c IS NOT NULL) OR (${type} = 'dead' AND msg.c IS NULL))
+    ORDER BY m.matched_at DESC
+    LIMIT 500`;
+
+  return {
+    period: meta(p),
+    type,
+    rows: rows.map((r) => ({
+      a: { id: r.a as string, name: r.a_name as string | null, email: r.a_email as string | null },
+      b: { id: r.b as string, name: r.b_name as string | null, email: r.b_email as string | null },
+      matchedAt: r.matched_at ? String(r.matched_at) : null,
+      messages: num(r.msgs),
+      talked: num(r.msgs) > 0,
+    })),
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* LIQUIDITY — density by residence country (+ gender split)           */
 /* ------------------------------------------------------------------ */
 export async function getLiquidity(minUsersIn: unknown, limitIn: unknown, genderIn: unknown) {

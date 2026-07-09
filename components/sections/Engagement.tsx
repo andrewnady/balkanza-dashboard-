@@ -11,9 +11,16 @@ const RANGES = [
   { label: "90d", value: 90 },
 ];
 
+function periodQuery(v: PeriodValue): string {
+  if (v.range === "all") return "range=all";
+  if (v.from && v.to) return `from=${v.from}&to=${v.to}`;
+  return `days=${v.days ?? 30}`;
+}
+
 export default function Engagement() {
   const [period, setPeriod] = useState<PeriodValue>({ days: 1 });
   const { data, error, loading } = useMetrics<any>("engagement", period);
+  const matchesHref = (type: string) => `/matches?type=${type}&${periodQuery(period)}`;
 
   return (
     <section className="section" id="engagement">
@@ -33,9 +40,9 @@ export default function Engagement() {
       ) : (
         <>
           <div className="grid grid-4" style={{ marginBottom: 16 }}>
-            <StatTile label="Matches in window" value={data.matchConvo.matches} format="int" />
-            <StatTile label="Matches that talked" value={data.matchConvo.talked} sub={`${fmtPct(data.matchConvo.pct)} of matches`} format="int" />
-            <StatTile label="Dead matches (no message)" value={data.matchConvo.dead} sub="never exchanged a word" format="int" goodDirection="down" />
+            <StatTile label="Matches in window" value={data.matchConvo.matches} format="int" href={matchesHref("all")} />
+            <StatTile label="Matches that talked" value={data.matchConvo.talked} sub={`${fmtPct(data.matchConvo.pct)} of matches`} format="int" href={matchesHref("talked")} />
+            <StatTile label="Dead matches (no message)" value={data.matchConvo.dead} sub="never exchanged a word" format="int" goodDirection="down" href={matchesHref("dead")} />
             <StatTile label="Like rate on swipes" value={data.swipes.likeRate} sub={`${fmtInt(data.swipes.swipes)} swipes`} format="pct" />
           </div>
           <div className="grid grid-2">
