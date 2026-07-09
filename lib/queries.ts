@@ -15,12 +15,12 @@ export async function getOverview(params: PeriodInput) {
 
   const [signups, active, revenue, matches, subs, conversion] = await Promise.all([
     sql`SELECT
-          COUNT(*) FILTER (WHERE created_at >= ${p.start}::date AND created_at < ${p.endEx}::date)         AS cur,
-          COUNT(*) FILTER (WHERE created_at >= ${p.prevStart}::date AND created_at < ${p.prevEndEx}::date) AS prev
+          COUNT(*) FILTER (WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz)         AS cur,
+          COUNT(*) FILTER (WHERE created_at >= ${p.prevStart}::timestamptz AND created_at < ${p.prevEndEx}::timestamptz) AS prev
         FROM users WHERE is_admin = false`,
     sql`SELECT
-          COUNT(*) FILTER (WHERE last_active_at >= ${p.start}::date AND last_active_at < ${p.endEx}::date)         AS cur,
-          COUNT(*) FILTER (WHERE last_active_at >= ${p.prevStart}::date AND last_active_at < ${p.prevEndEx}::date) AS prev
+          COUNT(*) FILTER (WHERE last_active_at >= ${p.start}::timestamptz AND last_active_at < ${p.endEx}::timestamptz)         AS cur,
+          COUNT(*) FILTER (WHERE last_active_at >= ${p.prevStart}::timestamptz AND last_active_at < ${p.prevEndEx}::timestamptz) AS prev
         FROM users WHERE is_admin = false AND is_disabled = false`,
     sql`WITH txns AS (
           SELECT created_at, amount FROM subscription_payments WHERE status = 'succeeded'
@@ -28,26 +28,26 @@ export async function getOverview(params: PeriodInput) {
           SELECT created_at, amount FROM purchases WHERE payment_status = 'paid'
         )
         SELECT
-          COALESCE(SUM(amount) FILTER (WHERE created_at >= ${p.start}::date AND created_at < ${p.endEx}::date), 0)         AS cur,
-          COALESCE(SUM(amount) FILTER (WHERE created_at >= ${p.prevStart}::date AND created_at < ${p.prevEndEx}::date), 0) AS prev
+          COALESCE(SUM(amount) FILTER (WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz), 0)         AS cur,
+          COALESCE(SUM(amount) FILTER (WHERE created_at >= ${p.prevStart}::timestamptz AND created_at < ${p.prevEndEx}::timestamptz), 0) AS prev
         FROM txns`,
     sql`SELECT
-          COUNT(*) FILTER (WHERE created_at >= ${p.start}::date AND created_at < ${p.endEx}::date)         AS cur,
-          COUNT(*) FILTER (WHERE created_at >= ${p.prevStart}::date AND created_at < ${p.prevEndEx}::date) AS prev
+          COUNT(*) FILTER (WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz)         AS cur,
+          COUNT(*) FILTER (WHERE created_at >= ${p.prevStart}::timestamptz AND created_at < ${p.prevEndEx}::timestamptz) AS prev
         FROM likes WHERE is_match = true`,
     // New subscriptions started in the period (+ total active for context).
     sql`SELECT
-          COUNT(*) FILTER (WHERE created_at >= ${p.start}::date AND created_at < ${p.endEx}::date)         AS cur,
-          COUNT(*) FILTER (WHERE created_at >= ${p.prevStart}::date AND created_at < ${p.prevEndEx}::date) AS prev,
+          COUNT(*) FILTER (WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz)         AS cur,
+          COUNT(*) FILTER (WHERE created_at >= ${p.prevStart}::timestamptz AND created_at < ${p.prevEndEx}::timestamptz) AS prev,
           COUNT(*) FILTER (WHERE status = 'active')                                                        AS total_active
         FROM user_subscriptions`,
     // Free→paid for the period's signup cohort: of users who signed up in the
     // window, how many are paying (have an active subscription).
     sql`SELECT
-          COUNT(*) FILTER (WHERE u.created_at >= ${p.start}::date AND u.created_at < ${p.endEx}::date)                              AS signups_cur,
-          COUNT(*) FILTER (WHERE u.created_at >= ${p.start}::date AND u.created_at < ${p.endEx}::date AND s.user_id IS NOT NULL)     AS paid_cur,
-          COUNT(*) FILTER (WHERE u.created_at >= ${p.prevStart}::date AND u.created_at < ${p.prevEndEx}::date)                       AS signups_prev,
-          COUNT(*) FILTER (WHERE u.created_at >= ${p.prevStart}::date AND u.created_at < ${p.prevEndEx}::date AND s.user_id IS NOT NULL) AS paid_prev
+          COUNT(*) FILTER (WHERE u.created_at >= ${p.start}::timestamptz AND u.created_at < ${p.endEx}::timestamptz)                              AS signups_cur,
+          COUNT(*) FILTER (WHERE u.created_at >= ${p.start}::timestamptz AND u.created_at < ${p.endEx}::timestamptz AND s.user_id IS NOT NULL)     AS paid_cur,
+          COUNT(*) FILTER (WHERE u.created_at >= ${p.prevStart}::timestamptz AND u.created_at < ${p.prevEndEx}::timestamptz)                       AS signups_prev,
+          COUNT(*) FILTER (WHERE u.created_at >= ${p.prevStart}::timestamptz AND u.created_at < ${p.prevEndEx}::timestamptz AND s.user_id IS NOT NULL) AS paid_prev
         FROM users u
         LEFT JOIN (SELECT DISTINCT user_id FROM user_subscriptions WHERE status = 'active') s ON s.user_id = u.id
         WHERE u.is_admin = false`,
@@ -81,13 +81,13 @@ export async function getGrowth(params: PeriodInput) {
   const p = resolvePeriod(params, [1, 7, 14, 30, 90], 30);
 
   const [trend, sources] = await Promise.all([
-    sql`SELECT created_at::date AS date, COUNT(*) AS signups
+    sql`SELECT (created_at - INTERVAL '3 hours')::date AS date, COUNT(*) AS signups
         FROM users
-        WHERE is_admin = false AND created_at >= ${p.start}::date AND created_at < ${p.endEx}::date
-        GROUP BY created_at::date ORDER BY date`,
+        WHERE is_admin = false AND created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz
+        GROUP BY 1 ORDER BY 1`,
     sql`SELECT COALESCE(register_source::text, 'unknown') AS source, COUNT(*) AS signups
         FROM users
-        WHERE is_admin = false AND created_at >= ${p.start}::date AND created_at < ${p.endEx}::date
+        WHERE is_admin = false AND created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz
         GROUP BY 1 ORDER BY signups DESC`,
   ]);
 
@@ -107,7 +107,7 @@ export async function getFunnel(params: PeriodInput) {
   const [cur, prev, completion] = await Promise.all([
     sql`WITH cohort AS (
           SELECT id FROM users WHERE is_admin = false
-            AND created_at >= ${p.start}::date AND created_at < ${p.endEx}::date
+            AND created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz
         )
         SELECT
           COUNT(DISTINCT c.id)                              AS registered,
@@ -122,7 +122,7 @@ export async function getFunnel(params: PeriodInput) {
         LEFT JOIN messages msg ON msg.sender_id = c.id AND msg.message_type = 'user'`,
     sql`WITH cohort AS (
           SELECT id FROM users WHERE is_admin = false
-            AND created_at >= ${p.prevStart}::date AND created_at < ${p.prevEndEx}::date
+            AND created_at >= ${p.prevStart}::timestamptz AND created_at < ${p.prevEndEx}::timestamptz
         )
         SELECT
           COUNT(DISTINCT c.id)                              AS registered,
@@ -173,7 +173,7 @@ export async function getEngagement(params: PeriodInput) {
   const [convo, retention, swipes] = await Promise.all([
     sql`WITH recent_matches AS (
           SELECT liker_id, liked_id FROM likes
-          WHERE is_match = true AND created_at >= ${p.start}::date AND created_at < ${p.endEx}::date
+          WHERE is_match = true AND created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz
         )
         SELECT COUNT(*) AS matches,
           COUNT(*) FILTER (WHERE EXISTS (
@@ -192,7 +192,7 @@ export async function getEngagement(params: PeriodInput) {
         FROM users WHERE is_admin=false AND created_at::date = CURRENT_DATE - 30`,
     sql`SELECT COALESCE(SUM(swipes_count),0) AS swipes, COALESCE(SUM(likes_count),0) AS likes,
           COALESCE(SUM(passes_count),0) AS passes
-        FROM daily_actions WHERE action_date >= ${p.start}::date AND action_date < ${p.endEx}::date`,
+        FROM daily_actions WHERE action_date >= ${p.startDate}::date AND action_date < ${p.endExDate}::date`,
   ]);
 
   const matches = num(convo[0].matches);
@@ -272,7 +272,7 @@ export async function getMonetization(params: PeriodInput) {
           FROM purchases pu JOIN one_time_services ots ON ots.id = pu.service_id WHERE pu.payment_status = 'paid'
         )
         SELECT type, COUNT(*) AS transactions, COALESCE(SUM(amount),0) AS revenue
-        FROM txns WHERE created_at >= ${p.start}::date AND created_at < ${p.endEx}::date
+        FROM txns WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz
         GROUP BY type ORDER BY revenue DESC`,
     sql`WITH txns AS (
           SELECT sp.created_at, sp.amount
@@ -281,9 +281,9 @@ export async function getMonetization(params: PeriodInput) {
           SELECT pu.created_at, pu.amount
           FROM purchases pu WHERE pu.payment_status = 'paid'
         )
-        SELECT created_at::date AS date, COALESCE(SUM(amount),0) AS revenue
-        FROM txns WHERE created_at >= ${p.start}::date AND created_at < ${p.endEx}::date
-        GROUP BY created_at::date ORDER BY date`,
+        SELECT (created_at - INTERVAL '3 hours')::date AS date, COALESCE(SUM(amount),0) AS revenue
+        FROM txns WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz
+        GROUP BY 1 ORDER BY 1`,
     sql`SELECT sp.display_name, sp.price, sp.duration, COUNT(*) FILTER (WHERE us.status = 'active') AS active_subs
         FROM user_subscriptions us JOIN subscription_plans sp ON sp.id = us.plan_id
         GROUP BY sp.display_name, sp.price, sp.duration
@@ -296,7 +296,7 @@ export async function getMonetization(params: PeriodInput) {
     // NOTE: in subscription_payments the success value is 'succeeded' (not 'paid').
     sql`SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE status = 'succeeded') AS succeeded,
           COUNT(*) FILTER (WHERE status <> 'succeeded') AS failed
-        FROM subscription_payments WHERE created_at >= ${p.start}::date AND created_at < ${p.endEx}::date`,
+        FROM subscription_payments WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz`,
   ]);
 
   const pay = payments[0];
@@ -392,22 +392,22 @@ export async function getSafety(params: PeriodInput) {
   const [verification, quality, zeroPhotos, spam, reports, dupBios, ipMulti, reportedUsers, botEmails] = await Promise.all([
     // Data-quality + verification measure the signup cohort in the window.
     sql`SELECT verification_status AS status, COUNT(*) AS users FROM users
-        WHERE is_admin = false AND created_at >= ${p.start}::date AND created_at < ${p.endEx}::date
+        WHERE is_admin = false AND created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz
         GROUP BY verification_status ORDER BY users DESC`,
     sql`SELECT COUNT(*) AS complete,
           COUNT(*) FILTER (WHERE gender IS NULL OR gender = '') AS missing_gender,
           COUNT(*) FILTER (WHERE heritage_countries IS NULL OR cardinality(heritage_countries) = 0) AS missing_heritage,
           COUNT(*) FILTER (WHERE residence_country IS NULL OR residence_country = '') AS missing_residence,
           COUNT(*) FILTER (WHERE birthdate IS NULL) AS missing_birthdate
-        FROM profiles WHERE is_complete = true AND created_at >= ${p.start}::date AND created_at < ${p.endEx}::date`,
+        FROM profiles WHERE is_complete = true AND created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz`,
     sql`SELECT COUNT(*) AS n FROM profiles p WHERE p.is_complete = true
-          AND p.created_at >= ${p.start}::date AND p.created_at < ${p.endEx}::date
+          AND p.created_at >= ${p.start}::timestamptz AND p.created_at < ${p.endEx}::timestamptz
           AND NOT EXISTS (SELECT 1 FROM profile_photos pp WHERE pp.profile_id = p.id)`,
     sql`SELECT COUNT(*) AS n FROM profiles p JOIN users u ON u.id = p.user_id AND u.is_disabled = false
-        WHERE p.created_at >= ${p.start}::date AND p.created_at < ${p.endEx}::date
+        WHERE p.created_at >= ${p.start}::timestamptz AND p.created_at < ${p.endEx}::timestamptz
           AND p.bio ~* '(whats\\s?app|telegram|viber|instagram|snapchat|@[a-z0-9_]+|\\+?\\d[\\d \\-]{7,}\\d)'`,
-    sql`SELECT created_at::date AS date, COUNT(*) AS reports FROM profile_reports
-        WHERE created_at >= ${p.start}::date AND created_at < ${p.endEx}::date GROUP BY created_at::date ORDER BY date`,
+    sql`SELECT (created_at - INTERVAL '3 hours')::date AS date, COUNT(*) AS reports FROM profile_reports
+        WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz GROUP BY 1 ORDER BY 1`,
     sql`SELECT p.bio, COUNT(*) AS num,
           json_agg(DISTINCT jsonb_build_object(
             'id', u.id,
@@ -415,7 +415,7 @@ export async function getSafety(params: PeriodInput) {
             'email', u.email)) AS members
         FROM profiles p JOIN users u ON u.id = p.user_id AND u.is_disabled = false
         WHERE p.bio IS NOT NULL AND LENGTH(TRIM(p.bio)) > 15
-          AND p.created_at >= ${p.start}::date AND p.created_at < ${p.endEx}::date
+          AND p.created_at >= ${p.start}::timestamptz AND p.created_at < ${p.endEx}::timestamptz
         GROUP BY p.bio HAVING COUNT(*) > 1 ORDER BY num DESC LIMIT 10`,
     sql`SELECT il.ip_address, COUNT(DISTINCT il.user_id) AS accounts,
           json_agg(DISTINCT jsonb_build_object(
@@ -423,14 +423,14 @@ export async function getSafety(params: PeriodInput) {
             'name', NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), ''),
             'email', u.email)) AS members
         FROM ip_logs il JOIN users u ON u.id = il.user_id
-        WHERE il.created_at >= ${p.start}::date AND il.created_at < ${p.endEx}::date
+        WHERE il.created_at >= ${p.start}::timestamptz AND il.created_at < ${p.endEx}::timestamptz
         GROUP BY il.ip_address HAVING COUNT(DISTINCT il.user_id) >= 3 ORDER BY accounts DESC LIMIT 10`,
     // repeatedly-reported users (>=2 reports in window)
     sql`SELECT r.reported_user_id AS id, COUNT(*) AS reports,
           mode() WITHIN GROUP (ORDER BY r.category::text) AS top_category,
           NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), '') AS name, u.email
         FROM profile_reports r JOIN users u ON u.id = r.reported_user_id
-        WHERE r.created_at >= ${p.start}::date AND r.created_at < ${p.endEx}::date
+        WHERE r.created_at >= ${p.start}::timestamptz AND r.created_at < ${p.endEx}::timestamptz
         GROUP BY r.reported_user_id, u.first_name, u.last_name, u.email
         HAVING COUNT(*) >= 2 ORDER BY reports DESC LIMIT 10`,
     // bot-like emails: 5+ consecutive digits before the @ (auto-generated handles)
@@ -440,7 +440,7 @@ export async function getSafety(params: PeriodInput) {
           SELECT id, NULLIF(TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')), '') AS name, email,
                  ROW_NUMBER() OVER (ORDER BY created_at DESC) AS rn
           FROM users WHERE is_admin = false AND email ~ '[0-9]{5,}@'
-            AND created_at >= ${p.start}::date AND created_at < ${p.endEx}::date
+            AND created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz
         ) t`,
   ]);
 
