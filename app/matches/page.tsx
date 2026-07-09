@@ -41,13 +41,13 @@ function MatchesContent() {
     <>
       <header className="topbar">
         <div className="topbar-inner">
-          <div className="brand">
+          <a className="brand" href="/">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img className="brand-logo" src="/logo.svg" alt="Balkanza" width={32} height={30} />
             <span className="brand-word">Balkanza</span>
             <span className="brand-divider" />
             <span className="brand-sub">Matches</span>
-          </div>
+          </a>
           <a className="logout-link" href="/#engagement">← Back to dashboard</a>
         </div>
       </header>

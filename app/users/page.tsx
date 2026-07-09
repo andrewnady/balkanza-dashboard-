@@ -2,7 +2,7 @@
 
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { useMetrics, fmtInt } from "../../components/ui/primitives";
+import { useMetrics, fmtInt, fmtAgo } from "../../components/ui/primitives";
 
 const PROFILE_URL = process.env.NEXT_PUBLIC_PROFILE_URL_TEMPLATE || "https://balkanza.com/profile/{id}";
 const profileUrl = (id: string) => PROFILE_URL.replace("{id}", encodeURIComponent(id));
@@ -37,13 +37,13 @@ function UsersContent() {
     <>
       <header className="topbar">
         <div className="topbar-inner">
-          <div className="brand">
+          <a className="brand" href="/">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img className="brand-logo" src="/logo.svg" alt="Balkanza" width={32} height={30} />
             <span className="brand-word">Balkanza</span>
             <span className="brand-divider" />
             <span className="brand-sub">Users</span>
-          </div>
+          </a>
           <a className="logout-link" href="/#overview">← Back to dashboard</a>
         </div>
       </header>
@@ -104,7 +104,7 @@ function UsersContent() {
                         </td>
                         <td className="muted">{u.source}</td>
                         <td className="muted">{fmtWhen(u.createdAt)}</td>
-                        <td className="muted">{fmtWhen(u.lastActiveAt)}</td>
+                        <td className="muted" title={fmtWhen(u.lastActiveAt)}>{fmtAgo(u.lastActiveAt)}</td>
                       </tr>
                     ))}
                   </tbody>

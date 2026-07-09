@@ -4,6 +4,23 @@ import { useEffect, useState, useCallback } from "react";
 
 /* ---------- formatters ---------- */
 export const fmtInt = (n: number) => n.toLocaleString("en-US");
+
+/** Relative "time ago" for recent activity; falls back to a short date when old. */
+export function fmtAgo(iso: string | null): string {
+  if (!iso) return "—";
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return "—";
+  const s = Math.floor((Date.now() - then) / 1000);
+  if (s < 0) return "just now";
+  if (s < 45) return "just now";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d} d ago`;
+  return new Date(then).toLocaleDateString("en-US", { dateStyle: "medium" });
+}
 export const fmtMoney = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n % 1 === 0 ? 0 : 2 });
 export const fmtPct = (n: number) => `${(Math.round(n * 10) / 10).toLocaleString("en-US")}%`;

@@ -2,7 +2,7 @@
 
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { useMetrics, fmtInt, fmtPct } from "../../components/ui/primitives";
+import { useMetrics, fmtInt, fmtPct, fmtAgo } from "../../components/ui/primitives";
 
 const PROFILE_URL = process.env.NEXT_PUBLIC_PROFILE_URL_TEMPLATE || "https://balkanza.com/profile/{id}";
 const profileUrl = (id: string) => PROFILE_URL.replace("{id}", encodeURIComponent(id));
@@ -37,13 +37,13 @@ function RetentionContent() {
     <>
       <header className="topbar">
         <div className="topbar-inner">
-          <div className="brand">
+          <a className="brand" href="/">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img className="brand-logo" src="/logo.svg" alt="Balkanza" width={32} height={30} />
             <span className="brand-word">Balkanza</span>
             <span className="brand-divider" />
             <span className="brand-sub">Retention</span>
-          </div>
+          </a>
           <a className="logout-link" href="/#diagnostics">← Back to dashboard</a>
         </div>
       </header>
@@ -121,7 +121,7 @@ function RetentionContent() {
                             <td className="num">{fmtInt(u.likesReceived)}</td>
                             <td className="num" style={{ fontWeight: 600 }}>{fmtInt(u.msgsSent)}</td>
                             <td className="num">{fmtInt(u.msgsReceived)}</td>
-                            <td className="muted">{fmtWhen(u.lastActiveAt)}</td>
+                            <td className="muted" title={fmtWhen(u.lastActiveAt)}>{fmtAgo(u.lastActiveAt)}</td>
                             <td className="muted">{fmtWhen(u.createdAt)}</td>
                           </tr>
                         ))}

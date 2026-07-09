@@ -19,7 +19,8 @@ export default function Login() {
       });
       if (res.ok) {
         const params = new URLSearchParams(window.location.search);
-        window.location.href = params.get("next") || "/";
+        // replace() so /login is not left in history (Back shouldn't return here).
+        window.location.replace(params.get("next") || "/");
         return;
       }
       const d = await res.json().catch(() => ({}));

@@ -9,12 +9,27 @@ export async function middleware(req: NextRequest) {
   if (!secret || !password) return NextResponse.next();
 
   const { pathname } = req.nextUrl;
-  // The login page and auth endpoints must stay reachable while logged out.
-  if (pathname.startsWith("/login") || pathname.startsWith("/api/auth/")) return NextResponse.next();
+  // Auth endpoints must stay reachable while logged out.
+  if (pathname.startsWith("/api/auth/")) return NextResponse.next();
 
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const expected = await makeToken(secret);
-  if (token && token === expected) return NextResponse.next();
+  const authed = Boolean(token && token === expected);
+
+  // The login page: if already authed (e.g. reached via the Back button),
+  // bounce forward to the app so users never get stuck looking at a login form.
+  if (pathname.startsWith("/login")) {
+    if (authed) {
+      const url = req.nextUrl.clone();
+      const next = req.nextUrl.searchParams.get("next");
+      url.pathname = next && next.startsWith("/") ? next : "/";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+    return NextResponse.next();
+  }
+
+  if (authed) return NextResponse.next();
 
   if (pathname.startsWith("/api/")) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
