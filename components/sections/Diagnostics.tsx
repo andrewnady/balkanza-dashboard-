@@ -73,10 +73,10 @@ export default function Diagnostics() {
                   {SEG.map((s) => {
                     const row = data.retention[s.key];
                     return (
-                      <tr key={s.key}>
+                      <tr key={s.key} className="row-link" onClick={() => { window.location.href = `/retention?segment=${s.key}`; }}>
                         <td style={{ fontWeight: 600 }}>
                           <span className="dot" style={{ background: s.color }} />
-                          {s.label} <span className="muted" style={{ fontWeight: 400 }}>· {s.note}</span>
+                          <span className="row-link-name">{s.label} ↗</span> <span className="muted" style={{ fontWeight: 400 }}>· {s.note}</span>
                         </td>
                         <td className="num">{fmtInt(row.n)}</td>
                         <td className="num" style={{ fontWeight: 700, color: s.key === "retained" ? "var(--good-text)" : undefined }}>{fmtPct(row.matched)}</td>

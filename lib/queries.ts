@@ -507,6 +507,89 @@ export async function getDiagnostics() {
 }
 
 /* ------------------------------------------------------------------ */
+/* RETENTION USERS — per-user detail behind a diagnostics segment      */
+/* ------------------------------------------------------------------ */
+export async function getRetentionUsers(segmentIn: unknown) {
+  const segment = ["retained", "churned", "ghost"].includes(String(segmentIn)) ? String(segmentIn) : "churned";
+
+  const [summary, rows] = await Promise.all([
+    sql`WITH cohort AS (
+          SELECT id, last_active_at,
+            CASE WHEN last_active_at IS NULL THEN 'ghost'
+                 WHEN last_active_at >= CURRENT_DATE - INTERVAL '3 days' THEN 'retained'
+                 ELSE 'churned' END AS grp
+          FROM users WHERE is_admin = false AND created_at::date BETWEEN CURRENT_DATE - 30 AND CURRENT_DATE - 7
+        ),
+        lks AS (SELECT l.liker_id uid, COUNT(*) c FROM likes l JOIN cohort co ON co.id = l.liker_id GROUP BY 1),
+        lkr AS (SELECT l.liked_id uid, COUNT(*) c FROM likes l JOIN cohort co ON co.id = l.liked_id GROUP BY 1),
+        mss AS (SELECT m.sender_id uid, COUNT(*) c FROM messages m JOIN cohort co ON co.id = m.sender_id WHERE m.message_type='user' GROUP BY 1),
+        ph  AS (SELECT DISTINCT profile_id FROM profile_photos)
+        SELECT COUNT(*) AS n,
+          ROUND(100.0*AVG((COALESCE(p.is_complete,false))::int),1) AS pct_complete,
+          ROUND(100.0*AVG((ph.profile_id IS NOT NULL)::int),1) AS pct_photo,
+          ROUND(100.0*AVG((lower(p.gender)='female')::int),1) AS pct_female,
+          ROUND(100.0*AVG((lower(p.gender)='male')::int),1) AS pct_male,
+          ROUND(100.0*AVG((p.heritage_countries IS NOT NULL AND cardinality(p.heritage_countries)>0)::int),1) AS pct_heritage,
+          ROUND(AVG(COALESCE(lks.c,0)),1) AS avg_likes_sent,
+          ROUND(AVG(COALESCE(lkr.c,0)),1) AS avg_likes_received,
+          ROUND(AVG(COALESCE(mss.c,0)),1) AS avg_msgs_sent
+        FROM cohort c
+        LEFT JOIN profiles p ON p.user_id=c.id
+        LEFT JOIN ph ON ph.profile_id=p.id
+        LEFT JOIN lks ON lks.uid=c.id LEFT JOIN lkr ON lkr.uid=c.id LEFT JOIN mss ON mss.uid=c.id
+        WHERE c.grp = ${segment}`,
+    sql`WITH cohort AS (
+          SELECT id, first_name, last_name, email, created_at, last_active_at, verification_status,
+            CASE WHEN last_active_at IS NULL THEN 'ghost'
+                 WHEN last_active_at >= CURRENT_DATE - INTERVAL '3 days' THEN 'retained'
+                 ELSE 'churned' END AS grp
+          FROM users WHERE is_admin = false AND created_at::date BETWEEN CURRENT_DATE - 30 AND CURRENT_DATE - 7
+        ),
+        lks AS (SELECT l.liker_id uid, COUNT(*) c FROM likes l JOIN cohort co ON co.id = l.liker_id GROUP BY 1),
+        lkr AS (SELECT l.liked_id uid, COUNT(*) c FROM likes l JOIN cohort co ON co.id = l.liked_id GROUP BY 1),
+        mss AS (SELECT m.sender_id uid, COUNT(*) c FROM messages m JOIN cohort co ON co.id = m.sender_id WHERE m.message_type='user' GROUP BY 1),
+        msr AS (SELECT m.receiver_id uid, COUNT(*) c FROM messages m JOIN cohort co ON co.id = m.receiver_id WHERE m.message_type='user' GROUP BY 1),
+        ph  AS (SELECT DISTINCT profile_id FROM profile_photos)
+        SELECT c.id,
+          NULLIF(TRIM(COALESCE(c.first_name,'')||' '||COALESCE(c.last_name,'')),'') AS name,
+          c.email, c.created_at, c.last_active_at, c.verification_status AS verification,
+          p.gender, COALESCE(NULLIF(p.residence_country,''),'—') AS residence,
+          array_to_string(p.heritage_countries, ', ') AS heritage,
+          COALESCE(p.is_complete,false) AS complete,
+          (ph.profile_id IS NOT NULL) AS has_photo,
+          COALESCE(lks.c,0) AS likes_sent, COALESCE(lkr.c,0) AS likes_received,
+          COALESCE(mss.c,0) AS msgs_sent, COALESCE(msr.c,0) AS msgs_received
+        FROM cohort c
+        LEFT JOIN profiles p ON p.user_id=c.id
+        LEFT JOIN ph ON ph.profile_id=p.id
+        LEFT JOIN lks ON lks.uid=c.id LEFT JOIN lkr ON lkr.uid=c.id
+        LEFT JOIN mss ON mss.uid=c.id LEFT JOIN msr ON msr.uid=c.id
+        WHERE c.grp = ${segment}
+        ORDER BY c.last_active_at DESC NULLS LAST LIMIT 500`,
+  ]);
+
+  const s = summary[0];
+  return {
+    segment,
+    summary: {
+      n: num(s.n), pctComplete: num(s.pct_complete), pctPhoto: num(s.pct_photo),
+      pctFemale: num(s.pct_female), pctMale: num(s.pct_male), pctHeritage: num(s.pct_heritage),
+      avgLikesSent: num(s.avg_likes_sent), avgLikesReceived: num(s.avg_likes_received), avgMsgsSent: num(s.avg_msgs_sent),
+    },
+    rows: rows.map((r) => ({
+      id: r.id as string, name: r.name as string | null, email: r.email as string | null,
+      gender: (r.gender as string) || null, residence: r.residence as string, heritage: (r.heritage as string) || null,
+      complete: r.complete as boolean, hasPhoto: r.has_photo as boolean,
+      likesSent: num(r.likes_sent), likesReceived: num(r.likes_received),
+      msgsSent: num(r.msgs_sent), msgsReceived: num(r.msgs_received),
+      lastActiveAt: r.last_active_at ? String(r.last_active_at) : null,
+      createdAt: r.created_at ? String(r.created_at) : null,
+      verification: (r.verification as string) || "unverified",
+    })),
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* TRUST & SAFETY — verification, data quality, spam signals           */
 /* ------------------------------------------------------------------ */
 export async function getSafety(params: PeriodInput) {
