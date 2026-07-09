@@ -9,9 +9,12 @@ const profileUrl = (id: string) => PROFILE_URL.replace("{id}", encodeURIComponen
 
 const TITLES: Record<string, string> = {
   all: "All matches",
-  talked: "Matches that talked",
-  dead: "Dead matches — no message",
+  twoway: "Two-way conversations",
+  oneside: "One-sided matches — one messaged, no reply",
+  dead: "Dead matches — no contact at all",
 };
+
+const STATUS_BADGE: Record<string, string> = { "two-way": "good", "one-sided": "warn", dead: "crit" };
 
 function fmtWhen(iso: string | null): string {
   if (!iso) return "—";
@@ -96,7 +99,7 @@ function MatchesContent() {
                         <td><UserCell u={r.b} /></td>
                         <td className="num">{fmtInt(r.messages)}</td>
                         <td>
-                          <span className={`badge ${r.talked ? "good" : "warn"}`}>{r.talked ? "talked" : "dead"}</span>
+                          <span className={`badge ${STATUS_BADGE[r.status] || "warn"}`}>{r.status}</span>
                         </td>
                         <td className="muted">{fmtWhen(r.matchedAt)}</td>
                       </tr>

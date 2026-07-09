@@ -31,10 +31,12 @@ export async function getOverview(params: PeriodInput) {
           COALESCE(SUM(amount) FILTER (WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz), 0)         AS cur,
           COALESCE(SUM(amount) FILTER (WHERE created_at >= ${p.prevStart}::timestamptz AND created_at < ${p.prevEndEx}::timestamptz), 0) AS prev
         FROM txns`,
+    // Distinct matched pairs (each match is two like rows — dedupe with LEAST/GREATEST).
     sql`SELECT
-          COUNT(*) FILTER (WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz)         AS cur,
-          COUNT(*) FILTER (WHERE created_at >= ${p.prevStart}::timestamptz AND created_at < ${p.prevEndEx}::timestamptz) AS prev
-        FROM likes WHERE is_match = true`,
+          COUNT(*) FILTER (WHERE mn >= ${p.start}::timestamptz AND mn < ${p.endEx}::timestamptz)         AS cur,
+          COUNT(*) FILTER (WHERE mn >= ${p.prevStart}::timestamptz AND mn < ${p.prevEndEx}::timestamptz) AS prev
+        FROM (SELECT MIN(created_at) AS mn FROM likes WHERE is_match = true
+              GROUP BY LEAST(liker_id, liked_id), GREATEST(liker_id, liked_id)) t`,
     // New premium subscriptions = subscriptions whose FIRST successful payment
     // lands in the period (a real paid conversion, not an unpaid subscription row).
     sql`WITH first_paid AS (
@@ -174,16 +176,23 @@ export async function getEngagement(params: PeriodInput) {
   const p = resolvePeriod(params, [1, 7, 30, 90], 30);
 
   const [convo, retention, swipes] = await Promise.all([
-    sql`WITH recent_matches AS (
-          SELECT liker_id, liked_id FROM likes
-          WHERE is_match = true AND created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz
+    // Unique matched pairs (each match is stored as two like rows — dedupe with
+    // LEAST/GREATEST). Split by how many of the two people ever messaged
+    // (text or rose/gift): 2 = two-way conversation, 1 = one-sided, 0 = dead.
+    sql`WITH m AS (
+          SELECT LEAST(liker_id, liked_id) a, GREATEST(liker_id, liked_id) b, MIN(created_at) matched_at
+          FROM likes WHERE is_match = true GROUP BY 1, 2
+        ),
+        pm AS (
+          SELECT LEAST(sender_id, receiver_id) a, GREATEST(sender_id, receiver_id) b, COUNT(DISTINCT sender_id) senders
+          FROM messages WHERE message_type IN ('user','one_time_service') GROUP BY 1, 2
         )
-        SELECT COUNT(*) AS matches,
-          COUNT(*) FILTER (WHERE EXISTS (
-            SELECT 1 FROM messages msg WHERE msg.message_type = 'user'
-              AND ((msg.sender_id = rm.liker_id AND msg.receiver_id = rm.liked_id)
-                OR (msg.sender_id = rm.liked_id AND msg.receiver_id = rm.liker_id)))) AS talked
-        FROM recent_matches rm`,
+        SELECT
+          COUNT(*) FILTER (WHERE m.matched_at >= ${p.start}::timestamptz AND m.matched_at < ${p.endEx}::timestamptz) AS matches,
+          COUNT(*) FILTER (WHERE m.matched_at >= ${p.start}::timestamptz AND m.matched_at < ${p.endEx}::timestamptz AND pm.senders = 2) AS two_way,
+          COUNT(*) FILTER (WHERE m.matched_at >= ${p.start}::timestamptz AND m.matched_at < ${p.endEx}::timestamptz AND pm.senders = 1) AS one_sided,
+          COUNT(*) FILTER (WHERE m.matched_at >= ${p.start}::timestamptz AND m.matched_at < ${p.endEx}::timestamptz AND COALESCE(pm.senders,0) = 0) AS dead
+        FROM m LEFT JOIN pm ON pm.a = m.a AND pm.b = m.b`,
     sql`SELECT '7d' AS cohort, COUNT(*) AS size,
           ROUND(100.0 * COUNT(*) FILTER (WHERE last_active_at >= CURRENT_DATE - INTERVAL '3 days') / NULLIF(COUNT(*),0),1) AS pct
         FROM users WHERE is_admin=false AND created_at::date = CURRENT_DATE - 7
@@ -199,11 +208,14 @@ export async function getEngagement(params: PeriodInput) {
   ]);
 
   const matches = num(convo[0].matches);
-  const talked = num(convo[0].talked);
+  const twoWay = num(convo[0].two_way);
+  const oneSided = num(convo[0].one_sided);
+  const dead = num(convo[0].dead);
+  const pctOf = (n: number) => (matches ? Math.round((1000 * n) / matches) / 10 : 0);
   const sw = swipes[0];
   return {
     period: meta(p),
-    matchConvo: { matches, talked, dead: matches - talked, pct: matches ? Math.round((1000 * talked) / matches) / 10 : 0 },
+    matchConvo: { matches, twoWay, oneSided, dead, twoWayPct: pctOf(twoWay), oneSidedPct: pctOf(oneSided), deadPct: pctOf(dead) },
     retention: retention.map((r) => ({ cohort: r.cohort as string, size: num(r.size), pct: num(r.pct) })),
     swipes: {
       swipes: num(sw.swipes),
@@ -299,7 +311,8 @@ export async function getSubscribers(nameIn: unknown, priceIn: unknown, duration
 /* ------------------------------------------------------------------ */
 export async function getMatches(params: PeriodInput, typeIn: unknown) {
   const p = resolvePeriod(params, [1, 7, 30, 90], 30);
-  const type = typeIn === "talked" || typeIn === "dead" ? (typeIn as string) : "all";
+  const allowed = ["all", "twoway", "oneside", "dead"];
+  const type = allowed.includes(String(typeIn)) ? String(typeIn) : "all";
 
   const rows = await sql`
     WITH m AS (
@@ -309,17 +322,21 @@ export async function getMatches(params: PeriodInput, typeIn: unknown) {
       GROUP BY 1, 2
     ),
     msg AS (
-      SELECT LEAST(sender_id, receiver_id) AS a, GREATEST(sender_id, receiver_id) AS b, COUNT(*) AS c
-      FROM messages WHERE message_type = 'user' GROUP BY 1, 2
+      SELECT LEAST(sender_id, receiver_id) AS a, GREATEST(sender_id, receiver_id) AS b,
+             COUNT(*) AS c, COUNT(DISTINCT sender_id) AS senders
+      FROM messages WHERE message_type IN ('user','one_time_service') GROUP BY 1, 2
     )
-    SELECT m.a, m.b, m.matched_at, msg.c AS msgs,
+    SELECT m.a, m.b, m.matched_at, COALESCE(msg.c,0) AS msgs, COALESCE(msg.senders,0) AS senders,
       NULLIF(TRIM(COALESCE(ua.first_name,'') || ' ' || COALESCE(ua.last_name,'')), '') AS a_name, ua.email AS a_email,
       NULLIF(TRIM(COALESCE(ub.first_name,'') || ' ' || COALESCE(ub.last_name,'')), '') AS b_name, ub.email AS b_email
     FROM m
     LEFT JOIN msg   ON msg.a = m.a AND msg.b = m.b
     JOIN users ua   ON ua.id = m.a
     JOIN users ub   ON ub.id = m.b
-    WHERE (${type} = 'all' OR (${type} = 'talked' AND msg.c IS NOT NULL) OR (${type} = 'dead' AND msg.c IS NULL))
+    WHERE (${type} = 'all'
+        OR (${type} = 'twoway'  AND COALESCE(msg.senders,0) = 2)
+        OR (${type} = 'oneside' AND COALESCE(msg.senders,0) = 1)
+        OR (${type} = 'dead'    AND COALESCE(msg.senders,0) = 0))
     ORDER BY m.matched_at DESC
     LIMIT 500`;
 
@@ -331,7 +348,8 @@ export async function getMatches(params: PeriodInput, typeIn: unknown) {
       b: { id: r.b as string, name: r.b_name as string | null, email: r.b_email as string | null },
       matchedAt: r.matched_at ? String(r.matched_at) : null,
       messages: num(r.msgs),
-      talked: num(r.msgs) > 0,
+      senders: num(r.senders),
+      status: num(r.senders) === 2 ? "two-way" : num(r.senders) === 1 ? "one-sided" : "dead",
     })),
   };
 }
@@ -470,9 +488,9 @@ export async function getDiagnostics() {
           COUNT(fl.t) AS ever_liked, COUNT(fm.t) AS ever_matched, COUNT(fg.t) AS ever_messaged, COUNT(*) AS total
         FROM users u LEFT JOIN fl ON fl.uid=u.id LEFT JOIN fm ON fm.uid=u.id LEFT JOIN fg ON fg.uid=u.id
         WHERE u.is_admin=false`,
-    // Dead-match split: of all matches, how many had 0 / 1 / 2 people message.
+    // Dead-match split: of all matches, how many had 0 / 1 / 2 people message (text or rose).
     sql`WITH matches AS (SELECT DISTINCT LEAST(liker_id,liked_id) a, GREATEST(liker_id,liked_id) b FROM likes WHERE is_match=true),
-             pm AS (SELECT LEAST(sender_id,receiver_id) a, GREATEST(sender_id,receiver_id) b, COUNT(DISTINCT sender_id) senders FROM messages WHERE message_type='user' GROUP BY 1,2)
+             pm AS (SELECT LEAST(sender_id,receiver_id) a, GREATEST(sender_id,receiver_id) b, COUNT(DISTINCT sender_id) senders FROM messages WHERE message_type IN ('user','one_time_service') GROUP BY 1,2)
         SELECT COALESCE(pm.senders,0) AS senders, COUNT(*) AS matches
         FROM matches m LEFT JOIN pm ON pm.a=m.a AND pm.b=m.b GROUP BY 1`,
     // Push reach: how many users could actually be re-engaged.

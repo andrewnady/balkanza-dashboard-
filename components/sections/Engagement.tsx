@@ -39,10 +39,11 @@ export default function Engagement() {
         </div>
       ) : (
         <>
-          <div className="grid grid-4" style={{ marginBottom: 16 }}>
+          <div className="grid grid-5" style={{ marginBottom: 16 }}>
             <StatTile label="Matches in window" value={data.matchConvo.matches} format="int" href={matchesHref("all")} />
-            <StatTile label="Matches that talked" value={data.matchConvo.talked} sub={`${fmtPct(data.matchConvo.pct)} of matches`} format="int" href={matchesHref("talked")} />
-            <StatTile label="Dead matches (no message)" value={data.matchConvo.dead} sub="never exchanged a word" format="int" goodDirection="down" href={matchesHref("dead")} />
+            <StatTile label="Two-way conversations" value={data.matchConvo.twoWay} sub={`${fmtPct(data.matchConvo.twoWayPct)} · both replied`} format="int" href={matchesHref("twoway")} />
+            <StatTile label="One-sided (no reply)" value={data.matchConvo.oneSided} sub={`${fmtPct(data.matchConvo.oneSidedPct)} · one messaged`} format="int" goodDirection="down" href={matchesHref("oneside")} />
+            <StatTile label="Dead (no contact)" value={data.matchConvo.dead} sub={`${fmtPct(data.matchConvo.deadPct)} · no message at all`} format="int" goodDirection="down" href={matchesHref("dead")} />
             <StatTile label="Like rate on swipes" value={data.swipes.likeRate} sub={`${fmtInt(data.swipes.swipes)} swipes`} format="pct" />
           </div>
           <div className="grid grid-2">
