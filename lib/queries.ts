@@ -54,7 +54,6 @@ export async function getOverview(params: PeriodInput) {
   ]);
 
   const pv = (v: number) => (p.hasPrev ? v : null);
-  const totalActive = num(subs[0].total_active);
   const cv = conversion[0];
   const convCur = num(cv.signups_cur) ? (100 * num(cv.paid_cur)) / num(cv.signups_cur) : 0;
   const convPrev = num(cv.signups_prev) ? (100 * num(cv.paid_prev)) / num(cv.signups_prev) : 0;
@@ -66,7 +65,7 @@ export async function getOverview(params: PeriodInput) {
       { key: "active", label: "Active users", value: num(active[0].cur), prev: pv(num(active[0].prev)), format: "int" },
       { key: "matches", label: "New matches", value: num(matches[0].cur), prev: pv(num(matches[0].prev)), format: "int" },
       { key: "revenue", label: "Revenue (all sources)", value: num(revenue[0].cur), prev: pv(num(revenue[0].prev)), format: "money" },
-      { key: "subs", label: "New subscriptions", value: num(subs[0].cur), prev: pv(num(subs[0].prev)), sub: `${fmtIntLocal(totalActive)} active total`, format: "int" },
+      { key: "subs", label: "New subscriptions", value: num(subs[0].cur), prev: pv(num(subs[0].prev)), format: "int" },
       { key: "conversion", label: "Free → paid", value: convCur, prev: pv(convPrev), sub: `${num(cv.paid_cur)} of ${fmtIntLocal(num(cv.signups_cur))} signups`, format: "pct" },
     ],
   };
