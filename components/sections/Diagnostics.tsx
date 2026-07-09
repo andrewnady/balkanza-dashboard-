@@ -178,6 +178,11 @@ export default function Diagnostics() {
                 measure them against the two-way conversation rate.
               </div>
             </div>
+            <p style={{ marginTop: 12 }}>
+              <a className="row-link-name" href="/icebreakers" style={{ fontWeight: 600, textDecoration: "none" }}>
+                Preview 100 generated icebreakers for real matches →
+              </a>
+            </p>
           </div>
         </>
       )}

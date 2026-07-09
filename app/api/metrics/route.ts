@@ -12,6 +12,7 @@ import {
   getUsers,
   getSubscribers,
   getRetentionUsers,
+  getIcebreakers,
 } from "@/lib/queries";
 
 export const runtime = "nodejs";
@@ -82,6 +83,9 @@ export async function GET(req: NextRequest) {
         break;
       case "retention":
         data = await getRetentionUsers(searchParams.get("segment"));
+        break;
+      case "icebreakers":
+        data = await getIcebreakers();
         break;
       default:
         return NextResponse.json({ error: `Unknown section: ${section}` }, { status: 400 });

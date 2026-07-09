@@ -307,6 +307,112 @@ export async function getSubscribers(nameIn: unknown, priceIn: unknown, duration
 }
 
 /* ------------------------------------------------------------------ */
+/* ICEBREAKERS — preview generator for a post-match opener test        */
+/* ------------------------------------------------------------------ */
+const COUNTRY: Record<string, { name: string; adj: string; city: string; flag: string }> = {
+  BA: { name: "Bosnia", adj: "Bosnian", city: "Sarajevo", flag: "🇧🇦" },
+  RS: { name: "Serbia", adj: "Serbian", city: "Belgrade", flag: "🇷🇸" },
+  HR: { name: "Croatia", adj: "Croatian", city: "Zagreb", flag: "🇭🇷" },
+  MK: { name: "North Macedonia", adj: "Macedonian", city: "Skopje", flag: "🇲🇰" },
+  AL: { name: "Albania", adj: "Albanian", city: "Tirana", flag: "🇦🇱" },
+  ME: { name: "Montenegro", adj: "Montenegrin", city: "Podgorica", flag: "🇲🇪" },
+  SI: { name: "Slovenia", adj: "Slovenian", city: "Ljubljana", flag: "🇸🇮" },
+  XK: { name: "Kosovo", adj: "Kosovar", city: "Pristina", flag: "🇽🇰" },
+  BG: { name: "Bulgaria", adj: "Bulgarian", city: "Sofia", flag: "🇧🇬" },
+  GR: { name: "Greece", adj: "Greek", city: "Athens", flag: "🇬🇷" },
+  RO: { name: "Romania", adj: "Romanian", city: "Bucharest", flag: "🇷🇴" },
+};
+
+const heritageLabel = (codes: string[] | null): string =>
+  !codes || !codes.length ? "—" : codes.map((c) => (COUNTRY[c] ? `${COUNTRY[c].flag} ${COUNTRY[c].name}` : c)).join(", ");
+
+function hashPair(a: string, b: string): number {
+  const s = a + b;
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+const pick = <T,>(arr: T[], seed: number): T => arr[seed % arr.length];
+
+function makeIcebreaker(a: any, b: any): string {
+  const seed = hashPair(a.id, b.id);
+  const bn = (b.name || "").split(" ")[0] || "there";
+  const aHer: string[] = a.heritage || [];
+  const bHer: string[] = b.heritage || [];
+  const shared = aHer.filter((x) => bHer.includes(x));
+
+  if (shared.length && COUNTRY[shared[0]]) {
+    const c = COUNTRY[shared[0]];
+    return pick(
+      [
+        `Zdravo ${bn}! Two ${c.adj}s matching — that's basically destiny 😄 Is your family from ${c.city}, or somewhere else back home?`,
+        `${bn}, fellow ${c.adj} here 🙌 When were you last back in ${c.name}? I'm long overdue for a trip.`,
+        `Okay ${bn}, ${c.adj} roots on both sides ${c.flag} — settle a debate: whose baka makes the better food, yours or mine? 😅`,
+      ],
+      seed
+    );
+  }
+
+  const aAdj = aHer.length && COUNTRY[aHer[0]] ? COUNTRY[aHer[0]].adj : null;
+  const bAdj = bHer.length && COUNTRY[bHer[0]] ? COUNTRY[bHer[0]].adj : null;
+  if (aAdj && bAdj) {
+    return pick(
+      [
+        `${bn}, ${aAdj} meets ${bAdj} 😏 so we have to settle it — ćevapi or pljeskavica?`,
+        `Zdravo ${bn}! Half the fun here is the friendly rivalry — ${aAdj} x ${bAdj}. What actually brought you to Balkanza?`,
+        `Hey ${bn} 👋 ${bAdj} and proud? Tell me the one dish from home you'd never give up.`,
+      ],
+      seed
+    );
+  }
+
+  if (a.residence && b.residence && a.residence === b.residence && a.residence !== "—") {
+    return `Hey ${bn}! Both repping the diaspora in ${a.residence} 😄 found any good Balkan spots nearby, or are we both just missing home cooking?`;
+  }
+  return `Zdravo ${bn}! What made you join Balkanza — looking for someone who just *gets* the culture without you having to explain it?`;
+}
+
+export async function getIcebreakers() {
+  const rows = await sql`
+    WITH m AS (
+      SELECT LEAST(liker_id, liked_id) a, GREATEST(liker_id, liked_id) b, MIN(created_at) matched_at
+      FROM likes WHERE is_match = true GROUP BY 1, 2
+    ),
+    pm AS (
+      SELECT LEAST(sender_id, receiver_id) a, GREATEST(sender_id, receiver_id) b, COUNT(DISTINCT sender_id) senders
+      FROM messages WHERE message_type IN ('user','one_time_service') GROUP BY 1, 2
+    )
+    SELECT m.a, m.b, m.matched_at, COALESCE(pm.senders,0) AS senders,
+      NULLIF(TRIM(COALESCE(ua.first_name,'') || ' ' || COALESCE(ua.last_name,'')), '') AS a_name, pa.gender AS a_gender,
+      pa.heritage_countries AS a_her, COALESCE(NULLIF(pa.residence_country,''),'—') AS a_res,
+      NULLIF(TRIM(COALESCE(ub.first_name,'') || ' ' || COALESCE(ub.last_name,'')), '') AS b_name, pb.gender AS b_gender,
+      pb.heritage_countries AS b_her, COALESCE(NULLIF(pb.residence_country,''),'—') AS b_res
+    FROM m
+    LEFT JOIN pm ON pm.a = m.a AND pm.b = m.b
+    JOIN users ua ON ua.id = m.a JOIN users ub ON ub.id = m.b
+    JOIN profiles pa ON pa.user_id = m.a JOIN profiles pb ON pb.user_id = m.b
+    WHERE COALESCE(pm.senders,0) < 2
+      AND pa.heritage_countries IS NOT NULL AND cardinality(pa.heritage_countries) > 0
+      AND pb.heritage_countries IS NOT NULL AND cardinality(pb.heritage_countries) > 0
+    ORDER BY m.matched_at DESC
+    LIMIT 100`;
+
+  return {
+    rows: rows.map((r) => {
+      const a = { id: r.a as string, name: r.a_name as string | null, heritage: (r.a_her as string[]) || [], residence: r.a_res as string };
+      const b = { id: r.b as string, name: r.b_name as string | null, heritage: (r.b_her as string[]) || [], residence: r.b_res as string };
+      return {
+        a: { ...a, heritageLabel: heritageLabel(a.heritage) },
+        b: { ...b, heritageLabel: heritageLabel(b.heritage) },
+        status: num(r.senders) === 1 ? "one-sided" : "dead",
+        matchedAt: r.matched_at ? String(r.matched_at) : null,
+        icebreaker: makeIcebreaker(a, b),
+      };
+    }),
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* MATCHES — drill-down list behind the Engagement tiles               */
 /* ------------------------------------------------------------------ */
 export async function getMatches(params: PeriodInput, typeIn: unknown) {
