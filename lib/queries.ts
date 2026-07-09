@@ -215,6 +215,42 @@ export async function getEngagement(params: PeriodInput) {
 }
 
 /* ------------------------------------------------------------------ */
+/* USERS — drill-down list behind sign-ups / active-users tiles        */
+/* ------------------------------------------------------------------ */
+export async function getUsers(params: PeriodInput, typeIn: unknown) {
+  const p = resolvePeriod(params, [1, 7, 30, 90], 30);
+  const type = typeIn === "active" ? "active" : "signups";
+
+  const rows = await sql`
+    SELECT u.id,
+      NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), '') AS name,
+      u.email, u.created_at, u.last_active_at,
+      u.verification_status AS verification, COALESCE(u.register_source::text, 'unknown') AS source,
+      EXISTS (SELECT 1 FROM profiles pr WHERE pr.user_id = u.id AND pr.is_complete) AS complete
+    FROM users u
+    WHERE u.is_admin = false
+      AND ( (${type} = 'signups' AND u.created_at >= ${p.start}::timestamptz AND u.created_at < ${p.endEx}::timestamptz)
+         OR (${type} = 'active'  AND u.is_disabled = false AND u.last_active_at >= ${p.start}::timestamptz AND u.last_active_at < ${p.endEx}::timestamptz) )
+    ORDER BY (CASE WHEN ${type} = 'active' THEN u.last_active_at ELSE u.created_at END) DESC NULLS LAST
+    LIMIT 500`;
+
+  return {
+    period: meta(p),
+    type,
+    rows: rows.map((r) => ({
+      id: r.id as string,
+      name: r.name as string | null,
+      email: r.email as string | null,
+      createdAt: r.created_at ? String(r.created_at) : null,
+      lastActiveAt: r.last_active_at ? String(r.last_active_at) : null,
+      verification: (r.verification as string) || "unverified",
+      source: r.source as string,
+      complete: r.complete as boolean,
+    })),
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* MATCHES — drill-down list behind the Engagement tiles               */
 /* ------------------------------------------------------------------ */
 export async function getMatches(params: PeriodInput, typeIn: unknown) {

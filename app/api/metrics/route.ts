@@ -9,6 +9,7 @@ import {
   getSafety,
   getDiagnostics,
   getMatches,
+  getUsers,
 } from "@/lib/queries";
 
 export const runtime = "nodejs";
@@ -65,6 +66,9 @@ export async function GET(req: NextRequest) {
         break;
       case "matches":
         data = await getMatches(period, searchParams.get("type"));
+        break;
+      case "users":
+        data = await getUsers(period, searchParams.get("type"));
         break;
       default:
         return NextResponse.json({ error: `Unknown section: ${section}` }, { status: 400 });
