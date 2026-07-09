@@ -118,7 +118,7 @@ export default function Monetization() {
             </div>
             <div className="card">
               <p className="card-title">Active subscription plans</p>
-              <p className="card-note">Where paying users actually sit — watch for duplicate price points.</p>
+              <p className="card-note">Where paying users actually sit — click a plan to see its subscribers.</p>
               <div className="tbl-scroll">
                 <table className="tbl">
                   <thead>
@@ -130,14 +130,17 @@ export default function Monetization() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.plans.map((p: any, i: number) => (
-                      <tr key={i}>
-                        <td style={{ fontWeight: 600 }}>{p.name}</td>
-                        <td className="num">{fmtMoney(p.price)}</td>
-                        <td className="muted">{p.duration}</td>
-                        <td className="num">{fmtInt(p.active)}</td>
-                      </tr>
-                    ))}
+                    {data.plans.map((p: any, i: number) => {
+                      const href = `/subscribers?name=${encodeURIComponent(p.name)}&price=${p.price}&duration=${encodeURIComponent(p.duration)}`;
+                      return (
+                        <tr key={i} className="row-link" onClick={() => { window.location.href = href; }}>
+                          <td style={{ fontWeight: 600 }}><span className="row-link-name">{p.name} ↗</span></td>
+                          <td className="num">{fmtMoney(p.price)}</td>
+                          <td className="muted">{p.duration}</td>
+                          <td className="num">{fmtInt(p.active)}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

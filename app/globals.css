@@ -158,6 +158,10 @@ a { color: inherit; }
 .match-user { color: var(--text-primary); text-decoration: none; }
 .match-user strong { color: var(--accent); font-weight: 600; }
 .match-user:hover strong { text-decoration: underline; }
+.tbl tr.row-link { cursor: pointer; }
+.tbl tr.row-link:hover { background: var(--accent-weak); }
+.row-link-name { color: var(--accent); }
+.row-link:hover .row-link-name { text-decoration: underline; }
 
 /* ---------- spam & abuse signals ---------- */
 .signal-chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }

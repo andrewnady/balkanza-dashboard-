@@ -251,6 +251,37 @@ export async function getUsers(params: PeriodInput, typeIn: unknown) {
 }
 
 /* ------------------------------------------------------------------ */
+/* SUBSCRIBERS — active subscribers behind a plan row                  */
+/* ------------------------------------------------------------------ */
+export async function getSubscribers(nameIn: unknown, priceIn: unknown, durationIn: unknown) {
+  const name = String(nameIn ?? "");
+  const price = String(priceIn ?? "");
+  const duration = String(durationIn ?? "");
+
+  const rows = await sql`
+    SELECT u.id,
+      NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), '') AS name,
+      u.email, us.created_at AS subscribed_at
+    FROM user_subscriptions us
+    JOIN subscription_plans sp ON sp.id = us.plan_id
+    JOIN users u ON u.id = us.user_id
+    WHERE us.status = 'active'
+      AND sp.display_name = ${name} AND sp.price = ${price}::numeric AND sp.duration = ${duration}
+    ORDER BY us.created_at DESC
+    LIMIT 500`;
+
+  return {
+    plan: { name: name.trim(), price: num(price), duration },
+    rows: rows.map((r) => ({
+      id: r.id as string,
+      name: r.name as string | null,
+      email: r.email as string | null,
+      subscribedAt: r.subscribed_at ? String(r.subscribed_at) : null,
+    })),
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* MATCHES — drill-down list behind the Engagement tiles               */
 /* ------------------------------------------------------------------ */
 export async function getMatches(params: PeriodInput, typeIn: unknown) {
