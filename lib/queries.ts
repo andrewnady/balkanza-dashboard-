@@ -218,9 +218,13 @@ export async function getEngagement(params: PeriodInput) {
 /* USERS — drill-down list behind sign-ups / active-users tiles        */
 /* ------------------------------------------------------------------ */
 export async function getUsers(params: PeriodInput, typeIn: unknown) {
-  const p = resolvePeriod(params, [1, 7, 30, 90], 30);
-  const type = typeIn === "active" ? "active" : "signups";
+  // Broad allow-list so any section's preset window (incl. 14/28) passes through.
+  const p = resolvePeriod(params, [1, 7, 14, 28, 30, 90], 30);
+  const allowed = ["signups", "active", "completed", "liked", "matched", "messaged"];
+  const type = allowed.includes(String(typeIn)) ? String(typeIn) : "signups";
 
+  // 'active' = last_active in window; everything else = signup cohort in window,
+  // optionally filtered to a funnel stage.
   const rows = await sql`
     SELECT u.id,
       NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), '') AS name,
@@ -229,8 +233,17 @@ export async function getUsers(params: PeriodInput, typeIn: unknown) {
       EXISTS (SELECT 1 FROM profiles pr WHERE pr.user_id = u.id AND pr.is_complete) AS complete
     FROM users u
     WHERE u.is_admin = false
-      AND ( (${type} = 'signups' AND u.created_at >= ${p.start}::timestamptz AND u.created_at < ${p.endEx}::timestamptz)
-         OR (${type} = 'active'  AND u.is_disabled = false AND u.last_active_at >= ${p.start}::timestamptz AND u.last_active_at < ${p.endEx}::timestamptz) )
+      AND (
+        (${type} = 'active'
+          AND u.is_disabled = false AND u.last_active_at >= ${p.start}::timestamptz AND u.last_active_at < ${p.endEx}::timestamptz)
+        OR (${type} <> 'active'
+          AND u.created_at >= ${p.start}::timestamptz AND u.created_at < ${p.endEx}::timestamptz
+          AND (${type} <> 'completed' OR EXISTS (SELECT 1 FROM profiles pr WHERE pr.user_id = u.id AND pr.is_complete))
+          AND (${type} <> 'liked'     OR EXISTS (SELECT 1 FROM likes l WHERE l.liker_id = u.id))
+          AND (${type} <> 'matched'   OR EXISTS (SELECT 1 FROM likes l WHERE l.liker_id = u.id AND l.is_match = true))
+          AND (${type} <> 'messaged'  OR EXISTS (SELECT 1 FROM messages m WHERE m.sender_id = u.id AND m.message_type = 'user'))
+        )
+      )
     ORDER BY (CASE WHEN ${type} = 'active' THEN u.last_active_at ELSE u.created_at END) DESC NULLS LAST
     LIMIT 500`;
 

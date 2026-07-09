@@ -10,6 +10,10 @@ const profileUrl = (id: string) => PROFILE_URL.replace("{id}", encodeURIComponen
 const TITLES: Record<string, string> = {
   signups: "New sign-ups",
   active: "Active users",
+  completed: "Completed profile",
+  liked: "Sent a like",
+  matched: "Got a match",
+  messaged: "Sent a message",
 };
 
 function fmtWhen(iso: string | null): string {
@@ -21,7 +25,7 @@ const VERIF_BADGE: Record<string, string> = { approved: "good", rejected: "crit"
 
 function UsersContent() {
   const sp = useSearchParams();
-  const type = sp.get("type") === "active" ? "active" : "signups";
+  const type = sp.get("type") && TITLES[sp.get("type") as string] ? (sp.get("type") as string) : "signups";
   const params: Record<string, string> = {};
   (["type", "days", "range", "from", "to"] as const).forEach((k) => {
     const v = sp.get(k);

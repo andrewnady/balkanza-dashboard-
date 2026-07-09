@@ -14,6 +14,20 @@ const RANGES = [
 // ordinal blue ramp (dark → light not allowed below step 250 on light surface)
 const FUNNEL_COLORS = ["#184f95", "#256abf", "#3987e5", "#5598e7", "#86b6ef"];
 
+const STAGE_TYPE: Record<string, string> = {
+  Registered: "signups",
+  "Completed profile": "completed",
+  "Sent a like": "liked",
+  "Got a match": "matched",
+  "Sent a message": "messaged",
+};
+
+function periodQuery(v: PeriodValue): string {
+  if (v.range === "all") return "range=all";
+  if (v.from && v.to) return `from=${v.from}&to=${v.to}`;
+  return `days=${v.days ?? 28}`;
+}
+
 function Delta({ cur, prev, hasPrev }: { cur: number; prev: number; hasPrev: boolean }) {
   if (!hasPrev) return <span className="delta flat">—</span>;
   if (prev === 0) return <span className="delta flat">{cur > 0 ? "new" : "–"}</span>;
@@ -70,11 +84,13 @@ export default function Funnel() {
                       </tr>
                     </thead>
                     <tbody>
-                      {data.stages.map((s: any, i: number) => (
-                        <tr key={s.stage}>
+                      {data.stages.map((s: any, i: number) => {
+                        const href = `/users?type=${STAGE_TYPE[s.stage] || "signups"}&${periodQuery(period)}`;
+                        return (
+                        <tr key={s.stage} className="row-link" onClick={() => { window.location.href = href; }}>
                           <td style={{ fontWeight: 600 }}>
                             <span className="dot" style={{ background: FUNNEL_COLORS[i] }} />
-                            {s.stage}
+                            <span className="row-link-name">{s.stage} ↗</span>
                           </td>
                           <td className="num" style={{ fontWeight: 700 }}>{fmtInt(s.users)}</td>
                           <td className="num muted">{hasPrev ? fmtInt(s.prevUsers) : "—"}</td>
@@ -82,7 +98,8 @@ export default function Funnel() {
                           <td className="num muted">{fmtPct(s.pctOfTop)}</td>
                           <td className="num muted">{i === 0 ? "—" : fmtPct(s.stepConversion)}</td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
