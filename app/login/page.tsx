@@ -1,11 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Back button can restore this page from the browser's bfcache without a
+  // server round-trip, so the middleware never runs to bounce an already
+  // logged-in user forward. Force a reload on bfcache restore so the
+  // middleware can send authed users straight to the dashboard.
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted) window.location.reload();
+    };
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
