@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMetrics, PeriodFilter, PeriodValue, periodLabel, SectionHead, CardSkeleton, ErrorNote, StatTile, fmtInt, fmtMoney, fmtPct } from "../ui/primitives";
+import { useMetrics, SESSION_ASOF, PeriodFilter, PeriodValue, periodLabel, SectionHead, CardSkeleton, ErrorNote, StatTile, fmtInt, fmtMoney, fmtPct } from "../ui/primitives";
 import { TrendArea } from "../ui/charts";
 
 const RANGES = [
@@ -21,10 +21,17 @@ const TYPE_COLORS: Record<string, string> = {
   Boosts: "var(--series-3)",
 };
 
+function periodQuery(v: PeriodValue): string {
+  if (v.range === "all") return "range=all";
+  if (v.from && v.to) return `from=${v.from}&to=${v.to}`;
+  return `days=${v.days ?? 30}`;
+}
+
 export default function Monetization() {
   const [period, setPeriod] = useState<PeriodValue>({ days: 1 });
   const { data, error, loading } = useMetrics<any>("monetization", period);
   const label = periodLabel(period);
+  const buyersHref = (type: string) => `/buyers?type=${encodeURIComponent(type)}&${periodQuery(period)}&asof=${encodeURIComponent(SESSION_ASOF)}`;
 
   return (
     <section className="section" id="monetization">
@@ -75,7 +82,7 @@ export default function Monetization() {
           <div className="grid grid-2">
             <div className="card">
               <p className="card-title">Revenue by service · {label}</p>
-              <p className="card-note">Subscriptions, renewals, roses, super likes &amp; boosts.</p>
+              <p className="card-note">Click a type to see who paid. Subscriptions, renewals, roses, super likes &amp; boosts.</p>
               {data.revenueByType.length === 0 ? (
                 <p className="muted" style={{ fontSize: 13 }}>No revenue in this window.</p>
               ) : (
@@ -91,10 +98,10 @@ export default function Monetization() {
                     </thead>
                     <tbody>
                       {data.revenueByType.map((s: any) => (
-                        <tr key={s.type}>
+                        <tr key={s.type} className="row-link" onClick={() => { window.location.href = buyersHref(s.type); }}>
                           <td style={{ fontWeight: 600 }}>
                             <span className="dot" style={{ background: TYPE_COLORS[s.type] || "var(--series-8)" }} />
-                            {s.type}
+                            <span className="row-link-name">{s.type} ↗</span>
                           </td>
                           <td className="num">{fmtInt(s.transactions)}</td>
                           <td className="num">{fmtMoney(s.revenue)}</td>
@@ -103,8 +110,8 @@ export default function Monetization() {
                       ))}
                     </tbody>
                     <tfoot>
-                      <tr>
-                        <td style={{ fontWeight: 700, borderTop: "1px solid var(--border)" }}>Total</td>
+                      <tr className="row-link" onClick={() => { window.location.href = buyersHref("all"); }}>
+                        <td style={{ fontWeight: 700, borderTop: "1px solid var(--border)" }}><span className="row-link-name">Total ↗</span></td>
                         <td className="num" style={{ fontWeight: 700, borderTop: "1px solid var(--border)" }}>
                           {fmtInt(data.revenueByType.reduce((a: number, r: any) => a + r.transactions, 0))}
                         </td>

@@ -413,6 +413,51 @@ export async function getIcebreakers() {
 }
 
 /* ------------------------------------------------------------------ */
+/* BUYERS — users behind a revenue-by-service row                      */
+/* ------------------------------------------------------------------ */
+export async function getBuyers(params: PeriodInput, typeIn: unknown) {
+  const p = resolvePeriod(params, [1, 7, 14, 30, 90], 30);
+  const allowed = ["all", "Subscriptions", "Renewals", "Roses", "Super Likes", "Boosts"];
+  const type = allowed.includes(String(typeIn)) ? String(typeIn) : "all";
+
+  const rows = await sql`
+    WITH txns AS (
+      SELECT sp.user_id, CASE WHEN sp.rn = 1 THEN 'Subscriptions' ELSE 'Renewals' END AS type, sp.amount, sp.created_at
+      FROM (SELECT user_id, amount, created_at, ROW_NUMBER() OVER (PARTITION BY subscription_id ORDER BY created_at) rn
+            FROM subscription_payments WHERE status = 'succeeded') sp
+      UNION ALL
+      SELECT pu.user_id,
+             CASE ots.service_type WHEN 'message' THEN 'Roses' WHEN 'super_like' THEN 'Super Likes'
+                  WHEN 'profile_boost' THEN 'Boosts' ELSE ots.name END AS type, pu.amount, pu.created_at
+      FROM purchases pu JOIN one_time_services ots ON ots.id = pu.service_id WHERE pu.payment_status = 'paid'
+    )
+    SELECT t.user_id AS id,
+      NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), '') AS name, u.email,
+      COUNT(*) AS txns, ROUND(SUM(t.amount)::numeric, 2) AS total, MAX(t.created_at) AS last_at,
+      STRING_AGG(DISTINCT t.type, ', ' ORDER BY t.type) AS types
+    FROM txns t JOIN users u ON u.id = t.user_id
+    WHERE t.created_at >= ${p.start}::timestamptz AND t.created_at < ${p.endEx}::timestamptz
+      AND (${type} = 'all' OR t.type = ${type})
+    GROUP BY t.user_id, u.first_name, u.last_name, u.email
+    ORDER BY total DESC NULLS LAST
+    LIMIT 500`;
+
+  return {
+    period: meta(p),
+    type,
+    rows: rows.map((r) => ({
+      id: r.id as string,
+      name: r.name as string | null,
+      email: r.email as string | null,
+      txns: num(r.txns),
+      total: num(r.total),
+      types: r.types as string,
+      lastAt: r.last_at ? String(r.last_at) : null,
+    })),
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* MATCHES — drill-down list behind the Engagement tiles               */
 /* ------------------------------------------------------------------ */
 export async function getMatches(params: PeriodInput, typeIn: unknown) {
