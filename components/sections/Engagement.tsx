@@ -60,7 +60,10 @@ export default function Engagement() {
             </div>
             <div className="card">
               <p className="card-title">Swipe outcomes</p>
-              <p className="card-note">Likes vs passes across the window.</p>
+              <p className="card-note">
+                Every like &amp; pass from all surfaces (swipe deck + likes page) · {fmtInt(data.swipes.likes)} likes
+                {data.swipes.superLikes ? ` (${fmtInt(data.swipes.superLikes)} super)` : ""} vs {fmtInt(data.swipes.passes)} passes.
+              </p>
               <HBars
                 data={[
                   { k: "Likes", v: data.swipes.likes },

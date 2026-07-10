@@ -202,9 +202,15 @@ export async function getEngagement(params: PeriodInput) {
         UNION ALL SELECT '30d', COUNT(*),
           ROUND(100.0 * COUNT(*) FILTER (WHERE last_active_at >= CURRENT_DATE - INTERVAL '3 days') / NULLIF(COUNT(*),0),1)
         FROM users WHERE is_admin=false AND created_at::date = CURRENT_DATE - 30`,
-    sql`SELECT COALESCE(SUM(swipes_count),0) AS swipes, COALESCE(SUM(likes_count),0) AS likes,
-          COALESCE(SUM(passes_count),0) AS passes
-        FROM daily_actions WHERE action_date >= ${p.startDate}::date AND action_date < ${p.endExDate}::date`,
+    // Count likes and passes from the authoritative source-of-truth tables.
+    // The daily_actions rollup only captures a fraction (one source, and only
+    // since 2026-05-29), so it under-reports badly. `likes` holds every like
+    // from any surface (swipe deck AND the "who liked you" page); `dislikes`
+    // holds every pass.
+    sql`SELECT
+          (SELECT COUNT(*) FROM likes    WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz) AS likes,
+          (SELECT COUNT(*) FROM likes    WHERE is_super_like AND created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz) AS super_likes,
+          (SELECT COUNT(*) FROM dislikes WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz) AS passes`,
   ]);
 
   const matches = num(convo[0].matches);
@@ -213,15 +219,19 @@ export async function getEngagement(params: PeriodInput) {
   const dead = num(convo[0].dead);
   const pctOf = (n: number) => (matches ? Math.round((1000 * n) / matches) / 10 : 0);
   const sw = swipes[0];
+  const likes = num(sw.likes);
+  const passes = num(sw.passes);
+  const totalSwipes = likes + passes;
   return {
     period: meta(p),
     matchConvo: { matches, twoWay, oneSided, dead, twoWayPct: pctOf(twoWay), oneSidedPct: pctOf(oneSided), deadPct: pctOf(dead) },
     retention: retention.map((r) => ({ cohort: r.cohort as string, size: num(r.size), pct: num(r.pct) })),
     swipes: {
-      swipes: num(sw.swipes),
-      likes: num(sw.likes),
-      passes: num(sw.passes),
-      likeRate: num(sw.swipes) ? Math.round((1000 * num(sw.likes)) / num(sw.swipes)) / 10 : 0,
+      swipes: totalSwipes,
+      likes,
+      superLikes: num(sw.super_likes),
+      passes,
+      likeRate: totalSwipes ? Math.round((1000 * likes) / totalSwipes) / 10 : 0,
     },
   };
 }
