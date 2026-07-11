@@ -124,7 +124,10 @@ export default function Monetization() {
               )}
             </div>
             <div className="card">
-              <p className="card-title">Active subscription plans</p>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                <p className="card-title">Active subscription plans</p>
+                <a className="card-link" href="/cancellations">View canceled subscribers ↗</a>
+              </div>
               <p className="card-note">Where paying users actually sit — click a plan to see its subscribers.</p>
               <div className="tbl-scroll">
                 <table className="tbl">

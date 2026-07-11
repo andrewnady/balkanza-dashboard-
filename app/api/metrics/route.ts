@@ -14,6 +14,7 @@ import {
   getRetentionUsers,
   getIcebreakers,
   getBuyers,
+  getCancellations,
 } from "@/lib/queries";
 
 export const runtime = "nodejs";
@@ -90,6 +91,9 @@ export async function GET(req: NextRequest) {
         break;
       case "buyers":
         data = await getBuyers(period, searchParams.get("type"));
+        break;
+      case "cancellations":
+        data = await getCancellations(period, searchParams.get("scope"));
         break;
       default:
         return NextResponse.json({ error: `Unknown section: ${section}` }, { status: 400 });

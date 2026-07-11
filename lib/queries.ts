@@ -468,6 +468,114 @@ export async function getBuyers(params: PeriodInput, typeIn: unknown) {
 }
 
 /* ------------------------------------------------------------------ */
+/* CANCELLATIONS — churned subscribers with full engagement profile    */
+/* ------------------------------------------------------------------ */
+export async function getCancellations(params: PeriodInput, scopeIn: unknown) {
+  const p = resolvePeriod(params, [1, 7, 30, 90], 30);
+
+  // Which population: paid churn (default), only explicitly canceled, or all ended.
+  const scope = ["paid", "canceled", "all"].includes(String(scopeIn)) ? String(scopeIn) : "paid";
+  const statuses = scope === "canceled" ? ["canceled"] : ["canceled", "expired"];
+  const requirePaid = scope === "paid";
+
+  // The "churn date" is when the subscription ended — the explicit cancel
+  // instant if present, else the end of the last paid period. The window
+  // filters on that date so "last 7 days" means "churned in the last 7 days".
+  const rows = await sql`
+    WITH pay AS (
+      SELECT subscription_id,
+        COUNT(*) FILTER (WHERE status='succeeded') AS paid,
+        MIN(processed_at) FILTER (WHERE status='succeeded') AS first_paid
+      FROM subscription_payments GROUP BY 1
+    ),
+    months AS (
+      SELECT subscription_id, STRING_AGG(to_char(mo,'Mon YYYY'), ', ' ORDER BY mo) AS pay_months
+      FROM (SELECT DISTINCT subscription_id, date_trunc('month', processed_at) AS mo
+            FROM subscription_payments WHERE status='succeeded') d
+      GROUP BY subscription_id
+    ),
+    churned AS (
+      SELECT DISTINCT ON (us.user_id)
+        us.user_id, us.id AS sub_id, us.plan_id, us.status, us.amount,
+        us.created_at AS started_at,
+        COALESCE(us.canceled_at::timestamptz, us.current_period_end) AS ended_at,
+        us.cancel_reason, COALESCE(p.paid,0) AS paid, mo.pay_months
+      FROM user_subscriptions us
+      LEFT JOIN pay p    ON p.subscription_id = us.id
+      LEFT JOIN months mo ON mo.subscription_id = us.id
+      WHERE us.status = ANY(${statuses})
+        AND (${requirePaid} = false OR COALESCE(p.paid,0) >= 1)
+        AND COALESCE(us.canceled_at::timestamptz, us.current_period_end) >= ${p.start}::timestamptz
+        AND COALESCE(us.canceled_at::timestamptz, us.current_period_end) <  ${p.endEx}::timestamptz
+      ORDER BY us.user_id, COALESCE(us.canceled_at::timestamptz, us.current_period_end) DESC
+    ),
+    ls AS (SELECT l.liker_id uid, COUNT(*) c, COUNT(*) FILTER (WHERE is_super_like) sc
+           FROM likes l JOIN churned ch ON ch.user_id = l.liker_id GROUP BY 1),
+    ds AS (SELECT d.disliker_id uid, COUNT(*) c
+           FROM dislikes d JOIN churned ch ON ch.user_id = d.disliker_id GROUP BY 1),
+    ms AS (SELECT mm.sender_id uid,
+             COUNT(*) FILTER (WHERE message_type='user') msgs,
+             COUNT(*) FILTER (WHERE message_type='one_time_service' AND one_time_service_id=1) roses
+           FROM messages mm JOIN churned ch ON ch.user_id = mm.sender_id GROUP BY 1),
+    bs AS (SELECT b.user_id uid, COUNT(*) c
+           FROM profile_boosts b JOIN churned ch ON ch.user_id = b.user_id GROUP BY 1),
+    mpairs AS (SELECT DISTINCT LEAST(liker_id,liked_id) a, GREATEST(liker_id,liked_id) b FROM likes WHERE is_match),
+    cm AS (SELECT ch.user_id uid, COUNT(*) matches
+           FROM churned ch JOIN mpairs mp ON ch.user_id IN (mp.a, mp.b) GROUP BY 1)
+    SELECT c.user_id AS id,
+      NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), '') AS name,
+      u.email, pr.gender, u.last_active_at,
+      c.status, c.amount, c.started_at, c.ended_at, c.cancel_reason, c.paid, c.pay_months,
+      sp.display_name AS plan_name,
+      COALESCE(ls.c,0) likes_sent, COALESCE(ls.sc,0) super_likes, COALESCE(ds.c,0) dislikes_sent,
+      COALESCE(ms.msgs,0) msgs_sent, COALESCE(ms.roses,0) roses_sent, COALESCE(bs.c,0) boosts,
+      COALESCE(cm.matches,0) matches
+    FROM churned c
+    JOIN users u ON u.id = c.user_id
+    LEFT JOIN profiles pr ON pr.user_id = c.user_id
+    LEFT JOIN subscription_plans sp ON sp.id = c.plan_id
+    LEFT JOIN ls ON ls.uid = c.user_id
+    LEFT JOIN ds ON ds.uid = c.user_id
+    LEFT JOIN ms ON ms.uid = c.user_id
+    LEFT JOIN bs ON bs.uid = c.user_id
+    LEFT JOIN cm ON cm.uid = c.user_id
+    ORDER BY c.ended_at DESC NULLS LAST
+    LIMIT 500`;
+
+  const list = rows.map((r) => ({
+    id: r.id as string,
+    name: r.name as string | null,
+    email: r.email as string | null,
+    gender: (r.gender as string | null) || "—",
+    status: r.status as string,
+    amount: num(r.amount),
+    planName: (r.plan_name as string | null)?.trim() || "—",
+    startedAt: r.started_at ? String(r.started_at) : null,
+    endedAt: r.ended_at ? String(r.ended_at) : null,
+    cancelReason: (r.cancel_reason as string | null)?.trim() || null,
+    payments: num(r.paid),
+    renewed: num(r.paid) >= 2,
+    payMonths: (r.pay_months as string | null) || "—",
+    lastActive: r.last_active_at ? String(r.last_active_at) : null,
+    likesSent: num(r.likes_sent),
+    superLikes: num(r.super_likes),
+    dislikesSent: num(r.dislikes_sent),
+    rosesSent: num(r.roses_sent),
+    boosts: num(r.boosts),
+    msgsSent: num(r.msgs_sent),
+    matches: num(r.matches),
+  }));
+
+  const totals = {
+    users: list.length,
+    revenue: Math.round(list.reduce((a, r) => a + r.amount * Math.max(r.payments, 1), 0) * 100) / 100,
+    renewed: list.filter((r) => r.renewed).length,
+  };
+
+  return { period: meta(p), scope, totals, rows: list };
+}
+
+/* ------------------------------------------------------------------ */
 /* MATCHES — drill-down list behind the Engagement tiles               */
 /* ------------------------------------------------------------------ */
 export async function getMatches(params: PeriodInput, typeIn: unknown) {
