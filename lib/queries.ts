@@ -663,6 +663,33 @@ export async function getLiquidity(minUsersIn: unknown, limitIn: unknown, gender
   };
 }
 
+const nextDay = (iso: string): string => {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+};
+
+// Turn sparse per-day revenue rows into a continuous daily series so days with
+// no transactions still render as an empty (zero-height) bar. For bounded
+// windows the series spans the whole window; for "all time" it starts at the
+// first day that had any revenue (avoids emitting decades of empty days).
+function fillDailyRevenue(rows: Record<string, unknown>[], p: Period) {
+  const byDate = new Map(
+    rows.map((r) => {
+      const date = String(r.date).slice(0, 10);
+      return [date, { subscriptions: num(r.subscriptions), roses: num(r.roses), superLikes: num(r.super_likes), boosts: num(r.boosts) }];
+    })
+  );
+  const firstWithData = rows.length ? String(rows[0].date).slice(0, 10) : p.endExDate;
+  const start = p.mode === "all" ? firstWithData : p.startDate;
+  const out: { date: string; subscriptions: number; roses: number; superLikes: number; boosts: number; revenue: number }[] = [];
+  for (let d = start; d < p.endExDate; d = nextDay(d)) {
+    const v = byDate.get(d) || { subscriptions: 0, roses: 0, superLikes: 0, boosts: 0 };
+    out.push({ date: d, ...v, revenue: v.subscriptions + v.roses + v.superLikes + v.boosts });
+  }
+  return out;
+}
+
 /* ------------------------------------------------------------------ */
 /* MONETIZATION — revenue, plans, conversion, offers, payment health   */
 /* ------------------------------------------------------------------ */
@@ -723,14 +750,7 @@ export async function getMonetization(params: PeriodInput) {
     period: meta(p),
     revenueByType,
     totalRevenue,
-    revenueTrend: trend.map((r) => ({
-      date: String(r.date).slice(0, 10),
-      subscriptions: num(r.subscriptions),
-      roses: num(r.roses),
-      superLikes: num(r.super_likes),
-      boosts: num(r.boosts),
-      revenue: num(r.subscriptions) + num(r.roses) + num(r.super_likes) + num(r.boosts),
-    })),
+    revenueTrend: fillDailyRevenue(trend, p),
     plans: plans.map((r) => ({ name: r.display_name as string, price: num(r.price), duration: (r.duration as string) || "", active: num(r.active_subs) })),
     offers: offers.map((r) => ({ name: r.name as string, impressions: num(r.impressions), claimed: num(r.claimed), claimRate: num(r.claim_rate) })),
     payments: { total: num(pay.total), succeeded: num(pay.succeeded), failed: num(pay.failed), failRate: num(pay.total) ? Math.round((1000 * num(pay.failed)) / num(pay.total)) / 10 : 0 },
