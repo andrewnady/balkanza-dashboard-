@@ -121,7 +121,7 @@ export default function Safety() {
           <div className="grid grid-2">
             <div className="card">
               <p className="card-title">Verification funnel</p>
-              <p className="card-note">Where users sit in identity verification.</p>
+              <p className="card-note">Live state across all users (not affected by the date filter) — matches the admin ID Verification queue.</p>
               <HBars
                 data={data.verification}
                 labelKey="status"

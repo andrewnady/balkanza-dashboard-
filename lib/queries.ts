@@ -905,9 +905,11 @@ export async function getSafety(params: PeriodInput) {
   // Every metric is scoped to profiles/users registered in the selected window
   // (and reports/IP-logs recorded in it), so the whole section reacts to the filter.
   const [verification, quality, zeroPhotos, spam, reports, dupBios, ipMulti, reportedUsers, botEmails] = await Promise.all([
-    // Data-quality + verification measure the signup cohort in the window.
+    // Verification is a LIVE moderation queue: a pending user needs review no
+    // matter when they signed up, so this is whole-base (not window-scoped) and
+    // matches the admin ID Verification queue exactly.
     sql`SELECT verification_status AS status, COUNT(*) AS users FROM users
-        WHERE is_admin = false AND created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz
+        WHERE is_admin = false
         GROUP BY verification_status ORDER BY users DESC`,
     sql`SELECT COUNT(*) AS complete,
           COUNT(*) FILTER (WHERE gender IS NULL OR gender = '') AS missing_gender,
