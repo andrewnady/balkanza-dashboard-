@@ -12,21 +12,28 @@ const RANGES = [
   { label: "90 days", value: 90 },
 ];
 
+// Brand product colours (match the in-app store chips): roses = red,
+// boosts = purple, super likes = gold, subscriptions = blue.
+const SUBSCRIPTION_BLUE = "#2563eb";
+const ROSES_RED = "#e23744";
+const SUPER_LIKES_GOLD = "#f5c542";
+const BOOSTS_PURPLE = "#7c4dff";
+
 // fixed colours per revenue type (categorical palette)
 const TYPE_COLORS: Record<string, string> = {
-  Subscriptions: "var(--series-1)",
-  Renewals: "var(--series-5)",
-  Roses: "var(--series-7)",
-  "Super Likes": "var(--series-2)",
-  Boosts: "var(--series-3)",
+  Subscriptions: SUBSCRIPTION_BLUE,
+  Renewals: "#60a5fa", // lighter blue so renewals read as a subscription variant
+  Roses: ROSES_RED,
+  "Super Likes": SUPER_LIKES_GOLD,
+  Boosts: BOOSTS_PURPLE,
 };
 
 // Series stacked in the daily-revenue chart (keys match getMonetization.revenueTrend).
 const REVENUE_SERIES = [
-  { key: "subscriptions", name: "Subscriptions", color: "var(--series-1)" },
-  { key: "roses", name: "Roses", color: "var(--series-7)" },
-  { key: "superLikes", name: "Super Likes", color: "var(--series-2)" },
-  { key: "boosts", name: "Boosts", color: "var(--series-3)" },
+  { key: "subscriptions", name: "Subscriptions", color: SUBSCRIPTION_BLUE },
+  { key: "roses", name: "Roses", color: ROSES_RED },
+  { key: "superLikes", name: "Super Likes", color: SUPER_LIKES_GOLD },
+  { key: "boosts", name: "Boosts", color: BOOSTS_PURPLE },
 ];
 
 function periodQuery(v: PeriodValue): string {
