@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { useMetrics, PeriodFilter, PeriodValue, periodLabel, SectionHead, CardSkeleton, ErrorNote, StatTile, fmtInt, fmtPct } from "../ui/primitives";
+import { useMetrics, SESSION_ASOF, PeriodFilter, PeriodValue, periodLabel, SectionHead, CardSkeleton, ErrorNote, StatTile, fmtInt } from "../ui/primitives";
 import { HBars, TrendArea } from "../ui/charts";
 
 const RANGES = [
@@ -71,12 +71,22 @@ function ClusterGroup({ title, clusters }: { title: string; clusters: { label: R
 }
 
 
+function periodQuery(v: PeriodValue): string {
+  if (v.range === "all") return "range=all";
+  if (v.from && v.to) return `from=${v.from}&to=${v.to}`;
+  return `days=${v.days ?? 14}`;
+}
+
 export default function Safety() {
   const [period, setPeriod] = useState<PeriodValue>({ days: 1 });
   const { data, error, loading } = useMetrics<any>("safety", period);
   const label = periodLabel(period);
 
-  const heritagePct = data && data.quality.complete ? (100 * data.quality.missing_heritage) / data.quality.complete : 0;
+  // Windowed quality tiles carry the current window + snapshot so the list matches the tile.
+  const qualityHref = (segment: string) =>
+    `/safety-users?segment=${segment}&${periodQuery(period)}&asof=${encodeURIComponent(SESSION_ASOF)}`;
+  // Verification bars are whole-base (live) — no window needed.
+  const verifHref = (status: string) => `/safety-users?segment=verif_${status}`;
 
   return (
     <section className="section" id="safety">
@@ -95,39 +105,24 @@ export default function Safety() {
         </div>
       ) : (
         <>
-          {heritagePct >= 90 && (
-            <div className="callout crit" style={{ marginBottom: 16 }}>
-              <span className="callout-icon">🚩</span>
-              <div>
-                <strong>Heritage data missing for {fmtPct(heritagePct)} of complete profiles.</strong> For a diaspora dating app this field is
-                core to matching and targeting — it&apos;s effectively unpopulated. Highest-priority data fix.
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-5" style={{ marginBottom: 16 }}>
-            <StatTile
-              label="Heritage coverage"
-              value={data.quality.complete ? (100 * (data.quality.complete - data.quality.missing_heritage)) / data.quality.complete : 0}
-              sub={`${fmtInt(data.quality.complete - data.quality.missing_heritage)} of ${fmtInt(data.quality.complete)} complete`}
-              format="pct"
-            />
-            <StatTile label="Bios with contact info" value={data.spamBios} sub="whatsapp / telegram / @handles / phone" format="int" goodDirection="down" />
-            <StatTile label="Complete profiles, no photo" value={data.zeroPhotos} sub="can't function in-app" format="int" goodDirection="down" />
-            <StatTile label="Missing gender" value={data.quality.missing_gender} sub={`of ${fmtInt(data.quality.complete)} complete`} format="int" goodDirection="down" />
-            <StatTile label="Missing birthdate" value={data.quality.missing_birthdate} sub={`of ${fmtInt(data.quality.complete)} complete`} format="int" goodDirection="down" />
+          <div className="grid grid-4" style={{ marginBottom: 16 }}>
+            <StatTile label="Bios with contact info" value={data.spamBios} sub="whatsapp / telegram / @handles / phone" format="int" goodDirection="down" href={qualityHref("bios_contact")} />
+            <StatTile label="Complete profiles, no photo" value={data.zeroPhotos} sub="can't function in-app" format="int" goodDirection="down" href={qualityHref("no_photo")} />
+            <StatTile label="Missing gender" value={data.quality.missing_gender} sub={`of ${fmtInt(data.quality.complete)} complete`} format="int" goodDirection="down" href={qualityHref("missing_gender")} />
+            <StatTile label="Missing birthdate" value={data.quality.missing_birthdate} sub={`of ${fmtInt(data.quality.complete)} complete`} format="int" goodDirection="down" href={qualityHref("missing_birthdate")} />
           </div>
 
           <div className="grid grid-2">
             <div className="card">
               <p className="card-title">Verification funnel</p>
-              <p className="card-note">Live state across all users (not affected by the date filter) — matches the admin ID Verification queue.</p>
+              <p className="card-note">Live state across all users (not affected by the date filter) — matches the admin ID Verification queue. Click a bar to see those users.</p>
               <HBars
                 data={data.verification}
                 labelKey="status"
                 valueKey="users"
                 colors={data.verification.map((v: any) => VERIF_COLORS[v.status] || "var(--series-5)")}
                 valueFmt={fmtInt}
+                onBarClick={(row: any) => { if (row?.status) window.location.href = verifHref(row.status); }}
               />
             </div>
             <div className="card">

@@ -122,6 +122,7 @@ export function HBars({
   height,
   valueFmt,
   showLabels = true,
+  onBarClick,
 }: {
   data: any[];
   labelKey: string;
@@ -130,6 +131,7 @@ export function HBars({
   height?: number;
   valueFmt?: (v: number) => string;
   showLabels?: boolean;
+  onBarClick?: (row: any) => void;
 }) {
   const h = height ?? Math.max(120, data.length * 46 + 20);
   return (
@@ -146,9 +148,16 @@ export function HBars({
           width={140}
         />
         <Tooltip cursor={{ fill: "var(--surface-2)" }} content={<TooltipBox valueFmt={valueFmt} />} />
-        <Bar dataKey={valueKey} name={valueKey} radius={[0, 5, 5, 0]} barSize={22}>
+        <Bar
+          dataKey={valueKey}
+          name={valueKey}
+          radius={[0, 5, 5, 0]}
+          barSize={22}
+          onClick={onBarClick ? (d: any) => onBarClick(d?.payload ?? d) : undefined}
+          cursor={onBarClick ? "pointer" : undefined}
+        >
           {data.map((_, i) => (
-            <Cell key={i} fill={colors ? colors[i % colors.length] : "var(--series-1)"} />
+            <Cell key={i} fill={colors ? colors[i % colors.length] : "var(--series-1)"} cursor={onBarClick ? "pointer" : undefined} />
           ))}
           {showLabels && (
             <LabelList

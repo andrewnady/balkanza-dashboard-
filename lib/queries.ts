@@ -981,3 +981,80 @@ export async function getSafety(params: PeriodInput) {
     botEmails: { total: num(botEmails[0].total), sample: (botEmails[0].sample as any[]) || [] },
   };
 }
+
+/* ------------------------------------------------------------------ */
+/* SAFETY USERS — drill-down behind verification bars + quality tiles  */
+/* ------------------------------------------------------------------ */
+export async function getSafetyUsers(params: PeriodInput, segmentIn: unknown) {
+  const p = resolvePeriod(params, [1, 7, 14, 30, 90], 14);
+  const seg = String(segmentIn || "");
+
+  // Shared row shape: user identity + the profile fields that make the list
+  // useful (gender, DOB, residence, heritage, photo, verification, activity).
+  let rows: Record<string, unknown>[] = [];
+
+  if (seg.startsWith("verif_")) {
+    // Verification segments are whole-base (mirror the live funnel) — no window.
+    const status = seg.slice("verif_".length); // unverified | approved | rejected | pending
+    rows = await sql`
+      SELECT u.id,
+        NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), '') AS name,
+        u.email, u.verification_status AS verification, u.last_active_at, u.created_at,
+        pr.gender, pr.residence_country AS residence, pr.birthdate, pr.heritage_countries AS heritage,
+        EXISTS(SELECT 1 FROM profile_photos pp WHERE pp.profile_id = pr.id) AS has_photo
+      FROM users u LEFT JOIN profiles pr ON pr.user_id = u.id
+      WHERE u.is_admin = false AND u.verification_status = ${status}
+      ORDER BY u.created_at DESC LIMIT 500`;
+  } else if (seg === "missing_gender" || seg === "missing_birthdate" || seg === "no_photo") {
+    // Data-quality segments mirror the windowed tiles: complete profiles that
+    // signed up in the selected window, missing the field in question.
+    rows = await sql`
+      SELECT u.id,
+        NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), '') AS name,
+        u.email, u.verification_status AS verification, u.last_active_at, u.created_at,
+        pr.gender, pr.residence_country AS residence, pr.birthdate, pr.heritage_countries AS heritage,
+        EXISTS(SELECT 1 FROM profile_photos pp WHERE pp.profile_id = pr.id) AS has_photo
+      FROM profiles pr JOIN users u ON u.id = pr.user_id
+      WHERE u.is_admin = false AND pr.is_complete = true
+        AND pr.created_at >= ${p.start}::timestamptz AND pr.created_at < ${p.endEx}::timestamptz
+        AND (
+          (${seg} = 'missing_gender'    AND (pr.gender IS NULL OR pr.gender = '')) OR
+          (${seg} = 'missing_birthdate' AND pr.birthdate IS NULL) OR
+          (${seg} = 'no_photo'          AND NOT EXISTS (SELECT 1 FROM profile_photos pp WHERE pp.profile_id = pr.id))
+        )
+      ORDER BY pr.created_at DESC LIMIT 500`;
+  } else if (seg === "bios_contact") {
+    // Mirror the spamBios tile: bios containing contact info (no is_complete filter).
+    rows = await sql`
+      SELECT u.id,
+        NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), '') AS name,
+        u.email, u.verification_status AS verification, u.last_active_at, u.created_at,
+        pr.gender, pr.residence_country AS residence, pr.birthdate, pr.heritage_countries AS heritage, pr.bio,
+        EXISTS(SELECT 1 FROM profile_photos pp WHERE pp.profile_id = pr.id) AS has_photo
+      FROM profiles pr JOIN users u ON u.id = pr.user_id AND u.is_disabled = false
+      WHERE pr.created_at >= ${p.start}::timestamptz AND pr.created_at < ${p.endEx}::timestamptz
+        AND pr.bio ~* '(whats\\s?app|telegram|viber|instagram|snapchat|@[a-z0-9_]+|\\+?\\d[\\d \\-]{7,}\\d)'
+      ORDER BY pr.created_at DESC LIMIT 500`;
+  }
+
+  const windowed = !seg.startsWith("verif_");
+  return {
+    period: meta(p),
+    segment: seg,
+    windowed,
+    rows: rows.map((r) => ({
+      id: r.id as string,
+      name: r.name as string | null,
+      email: r.email as string | null,
+      verification: (r.verification as string) || "unverified",
+      gender: (r.gender as string | null) || "—",
+      residence: (r.residence as string | null)?.trim() || "—",
+      birthdate: r.birthdate ? String(r.birthdate).slice(0, 10) : null,
+      heritage: ((r.heritage as string[]) || []).join(", ") || "—",
+      hasPhoto: Boolean(r.has_photo),
+      bio: (r.bio as string | null) || null,
+      lastActive: r.last_active_at ? String(r.last_active_at) : null,
+      createdAt: r.created_at ? String(r.created_at) : null,
+    })),
+  };
+}
