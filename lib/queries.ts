@@ -687,13 +687,18 @@ export async function getMonetization(params: PeriodInput) {
         FROM txns WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz
         GROUP BY type ORDER BY revenue DESC`,
     sql`WITH txns AS (
-          SELECT sp.created_at, sp.amount
-          FROM (SELECT created_at, amount FROM subscription_payments WHERE status = 'succeeded') sp
+          SELECT created_at, 'Subscriptions' AS type, amount FROM subscription_payments WHERE status = 'succeeded'
           UNION ALL
-          SELECT pu.created_at, pu.amount
-          FROM purchases pu WHERE pu.payment_status = 'paid'
+          SELECT pu.created_at,
+                 CASE ots.service_type WHEN 'message' THEN 'Roses' WHEN 'super_like' THEN 'Super Likes'
+                      WHEN 'profile_boost' THEN 'Boosts' ELSE ots.name END AS type, pu.amount
+          FROM purchases pu JOIN one_time_services ots ON ots.id = pu.service_id WHERE pu.payment_status = 'paid'
         )
-        SELECT created_at::date AS date, COALESCE(SUM(amount),0) AS revenue
+        SELECT created_at::date AS date,
+          COALESCE(SUM(amount) FILTER (WHERE type = 'Subscriptions'), 0) AS subscriptions,
+          COALESCE(SUM(amount) FILTER (WHERE type = 'Roses'), 0)         AS roses,
+          COALESCE(SUM(amount) FILTER (WHERE type = 'Super Likes'), 0)   AS super_likes,
+          COALESCE(SUM(amount) FILTER (WHERE type = 'Boosts'), 0)        AS boosts
         FROM txns WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz
         GROUP BY 1 ORDER BY 1`,
     sql`SELECT sp.display_name, sp.price, sp.duration, COUNT(*) FILTER (WHERE us.status = 'active') AS active_subs
@@ -718,7 +723,14 @@ export async function getMonetization(params: PeriodInput) {
     period: meta(p),
     revenueByType,
     totalRevenue,
-    revenueTrend: trend.map((r) => ({ date: String(r.date).slice(0, 10), revenue: num(r.revenue) })),
+    revenueTrend: trend.map((r) => ({
+      date: String(r.date).slice(0, 10),
+      subscriptions: num(r.subscriptions),
+      roses: num(r.roses),
+      superLikes: num(r.super_likes),
+      boosts: num(r.boosts),
+      revenue: num(r.subscriptions) + num(r.roses) + num(r.super_likes) + num(r.boosts),
+    })),
     plans: plans.map((r) => ({ name: r.display_name as string, price: num(r.price), duration: (r.duration as string) || "", active: num(r.active_subs) })),
     offers: offers.map((r) => ({ name: r.name as string, impressions: num(r.impressions), claimed: num(r.claimed), claimRate: num(r.claim_rate) })),
     payments: { total: num(pay.total), succeeded: num(pay.succeeded), failed: num(pay.failed), failRate: num(pay.total) ? Math.round((1000 * num(pay.failed)) / num(pay.total)) / 10 : 0 },

@@ -200,6 +200,43 @@ export function GroupedBars({
   );
 }
 
+/* ---- stacked bars (multi-series per x, e.g. daily revenue by source) ---- */
+export function StackedBars({
+  data,
+  xKey,
+  series,
+  height = 260,
+  valueFmt,
+}: {
+  data: any[];
+  xKey: string;
+  series: { key: string; name: string; color: string }[];
+  height?: number;
+  valueFmt?: (v: number) => string;
+}) {
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart data={data} margin={{ top: 6, right: 8, left: -12, bottom: 0 }}>
+        <CartesianGrid stroke={GRID} vertical={false} />
+        <XAxis dataKey={xKey} tick={{ fill: AXIS, fontSize: 11 }} tickLine={false} axisLine={{ stroke: GRID }} minTickGap={24} />
+        <YAxis tick={{ fill: AXIS, fontSize: 11 }} tickLine={false} axisLine={false} width={44} tickFormatter={valueFmt} />
+        <Tooltip cursor={{ fill: "var(--surface-2)" }} content={<TooltipBox valueFmt={valueFmt} />} />
+        {series.map((s, i) => (
+          <Bar
+            key={s.key}
+            dataKey={s.key}
+            name={s.name}
+            stackId="rev"
+            fill={s.color}
+            radius={i === series.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+            maxBarSize={26}
+          />
+        ))}
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
 export const SERIES = [
   "var(--series-1)",
   "var(--series-2)",

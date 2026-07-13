@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMetrics, SESSION_ASOF, PeriodFilter, PeriodValue, periodLabel, SectionHead, CardSkeleton, ErrorNote, StatTile, fmtInt, fmtMoney, fmtPct } from "../ui/primitives";
-import { TrendArea } from "../ui/charts";
+import { StackedBars } from "../ui/charts";
 
 const RANGES = [
   { label: "Today", value: 1 },
@@ -20,6 +20,14 @@ const TYPE_COLORS: Record<string, string> = {
   "Super Likes": "var(--series-2)",
   Boosts: "var(--series-3)",
 };
+
+// Series stacked in the daily-revenue chart (keys match getMonetization.revenueTrend).
+const REVENUE_SERIES = [
+  { key: "subscriptions", name: "Subscriptions", color: "var(--series-1)" },
+  { key: "roses", name: "Roses", color: "var(--series-7)" },
+  { key: "superLikes", name: "Super Likes", color: "var(--series-2)" },
+  { key: "boosts", name: "Boosts", color: "var(--series-3)" },
+];
 
 function periodQuery(v: PeriodValue): string {
   if (v.range === "all") return "range=all";
@@ -62,11 +70,19 @@ export default function Monetization() {
 
           <div className="grid grid-3" style={{ marginBottom: 16 }}>
             <div className="card col-span-2">
-              <p className="card-title">Revenue trend — all sources</p>
+              <p className="card-title">Daily revenue by source</p>
               <p className="card-note">
-                Subscriptions, renewals, roses, super likes &amp; boosts per day · total {fmtMoney(data.totalRevenue)} this window.
+                Subscriptions, roses, super likes &amp; boosts stacked per day · total {fmtMoney(data.totalRevenue)} this window.
               </p>
-              <TrendArea data={data.revenueTrend} xKey="date" yKey="revenue" color="var(--series-4)" valueFmt={fmtMoney} height={190} />
+              <StackedBars data={data.revenueTrend} xKey="date" series={REVENUE_SERIES} valueFmt={fmtMoney} height={200} />
+              <div className="chart-legend">
+                {REVENUE_SERIES.map((s) => (
+                  <span key={s.key} className="legend-item">
+                    <span className="legend-dot" style={{ background: s.color }} />
+                    {s.name}
+                  </span>
+                ))}
+              </div>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <StatTile label="Total revenue" value={data.totalRevenue} sub={label} format="money" />

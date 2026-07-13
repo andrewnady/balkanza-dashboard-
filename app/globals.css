@@ -279,6 +279,10 @@ a.brand:hover .brand-word { color: var(--accent); }
 .card-link { color: var(--accent); font-weight: 600; font-size: 12.5px; text-decoration: none; white-space: nowrap; }
 .card-link:hover { text-decoration: underline; }
 
+.chart-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; padding-left: 8px; }
+.legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
+.legend-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
 /* callout */
 .callout { display: flex; gap: 10px; padding: 12px 14px; border-radius: var(--radius-sm); font-size: 13px; align-items: flex-start; }
 .callout.crit { background: rgba(208,59,59,0.10); border: 1px solid rgba(208,59,59,0.25); }
