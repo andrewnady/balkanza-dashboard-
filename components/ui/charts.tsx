@@ -6,6 +6,7 @@ import {
   Line,
   AreaChart,
   Area,
+  ComposedChart,
   BarChart,
   Bar,
   XAxis,
@@ -38,7 +39,7 @@ function TooltipBox({ active, payload, label, valueFmt }: any) {
           <span style={{ width: 9, height: 9, borderRadius: 3, background: p.color || p.fill }} />
           <span style={{ color: "var(--text-secondary)" }}>{p.name}:</span>
           <strong style={{ fontVariantNumeric: "tabular-nums" }}>
-            {valueFmt ? valueFmt(p.value) : p.value?.toLocaleString?.() ?? p.value}
+            {valueFmt ? valueFmt(p.value, p) : p.value?.toLocaleString?.() ?? p.value}
           </strong>
         </div>
       ))}
@@ -78,6 +79,58 @@ export function TrendArea({
         <Tooltip content={<TooltipBox valueFmt={valueFmt} />} />
         <Area type="monotone" dataKey={yKey} name={yKey} stroke={color} strokeWidth={2} fill={`url(#${gid})`} dot={false} activeDot={{ r: 4 }} />
       </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+
+/* ---- dual-axis trend: area (left) + line (right), e.g. sign-ups + completion % ---- */
+export function DualAxisTrend({
+  data,
+  xKey,
+  areaKey,
+  areaName,
+  areaColor = "var(--series-1)",
+  lineKey,
+  lineName,
+  lineColor = "var(--series-2)",
+  height = 240,
+  leftFmt,
+  rightFmt,
+  rightDomain = [0, 100],
+}: {
+  data: any[];
+  xKey: string;
+  areaKey: string;
+  areaName: string;
+  areaColor?: string;
+  lineKey: string;
+  lineName: string;
+  lineColor?: string;
+  height?: number;
+  leftFmt?: (v: number) => string;
+  rightFmt?: (v: number) => string;
+  rightDomain?: [number, number];
+}) {
+  const gid = `g-${areaKey}`;
+  const fmt = (value: number, entry: any) =>
+    entry?.dataKey === lineKey ? (rightFmt ? rightFmt(value) : String(value)) : leftFmt ? leftFmt(value) : String(value);
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <ComposedChart data={data} margin={{ top: 6, right: 4, left: -12, bottom: 0 }}>
+        <defs>
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={areaColor} stopOpacity={0.26} />
+            <stop offset="100%" stopColor={areaColor} stopOpacity={0.02} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid stroke={GRID} vertical={false} />
+        <XAxis dataKey={xKey} tick={{ fill: AXIS, fontSize: 11 }} tickLine={false} axisLine={{ stroke: GRID }} minTickGap={24} />
+        <YAxis yAxisId="left" tick={{ fill: AXIS, fontSize: 11 }} tickLine={false} axisLine={false} width={44} tickFormatter={leftFmt} />
+        <YAxis yAxisId="right" orientation="right" domain={rightDomain} tick={{ fill: AXIS, fontSize: 11 }} tickLine={false} axisLine={false} width={44} tickFormatter={rightFmt} />
+        <Tooltip content={<TooltipBox valueFmt={fmt} />} />
+        <Area yAxisId="left" type="monotone" dataKey={areaKey} name={areaName} stroke={areaColor} strokeWidth={2} fill={`url(#${gid})`} dot={false} activeDot={{ r: 4 }} />
+        <Line yAxisId="right" type="monotone" dataKey={lineKey} name={lineName} stroke={lineColor} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+      </ComposedChart>
     </ResponsiveContainer>
   );
 }

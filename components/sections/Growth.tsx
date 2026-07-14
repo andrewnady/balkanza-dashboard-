@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useMetrics, PeriodFilter, PeriodValue, periodLabel, SectionHead, CardSkeleton, ErrorNote, fmtInt } from "../ui/primitives";
-import { TrendArea, HBars, SERIES } from "../ui/charts";
+import { useMetrics, PeriodFilter, PeriodValue, periodLabel, SectionHead, CardSkeleton, ErrorNote, fmtInt, fmtPct } from "../ui/primitives";
+import { DualAxisTrend, HBars, SERIES } from "../ui/charts";
 
 const RANGES = [
   { label: "Today", value: 1 },
@@ -28,9 +28,30 @@ export default function Growth() {
       ) : (
         <div className="grid grid-3">
           <div className="card col-span-2">
-            <p className="card-title">Sign-ups per day</p>
-            <p className="card-note">New non-admin registrations, {periodLabel(period)}.</p>
-            {loading || !data ? <CardSkeleton height={220} /> : <TrendArea data={data.trend} xKey="date" yKey="signups" valueFmt={fmtInt} />}
+            <p className="card-title">Sign-ups &amp; profile completion per day</p>
+            <p className="card-note">New non-admin registrations (area) vs. % of that day&apos;s cohort completing their profile (line), {periodLabel(period)}.</p>
+            {loading || !data ? (
+              <CardSkeleton height={240} />
+            ) : (
+              <>
+                <DualAxisTrend
+                  data={data.trend}
+                  xKey="date"
+                  areaKey="signups"
+                  areaName="Sign-ups"
+                  areaColor="var(--series-1)"
+                  lineKey="pctComplete"
+                  lineName="Profile completion"
+                  lineColor="var(--series-4)"
+                  leftFmt={fmtInt}
+                  rightFmt={fmtPct}
+                />
+                <div className="chart-legend">
+                  <span className="legend-item"><span className="legend-dot" style={{ background: "var(--series-1)" }} />Sign-ups</span>
+                  <span className="legend-item"><span className="legend-dot" style={{ background: "var(--series-4)" }} />Profile completion %</span>
+                </div>
+              </>
+            )}
           </div>
           <div className="card">
             <p className="card-title">Source mix</p>

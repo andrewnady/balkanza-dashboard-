@@ -86,9 +86,11 @@ export async function getGrowth(params: PeriodInput) {
   const p = resolvePeriod(params, [1, 7, 14, 30, 90], 30);
 
   const [trend, sources] = await Promise.all([
-    sql`SELECT created_at::date AS date, COUNT(*) AS signups
-        FROM users
-        WHERE is_admin = false AND created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz
+    // Per day: new sign-ups + what % of that day's cohort completed their profile.
+    sql`SELECT u.created_at::date AS date, COUNT(*) AS signups,
+          ROUND(100.0 * COUNT(*) FILTER (WHERE p.is_complete) / NULLIF(COUNT(*),0), 1) AS pct_complete
+        FROM users u LEFT JOIN profiles p ON p.user_id = u.id
+        WHERE u.is_admin = false AND u.created_at >= ${p.start}::timestamptz AND u.created_at < ${p.endEx}::timestamptz
         GROUP BY 1 ORDER BY 1`,
     sql`SELECT COALESCE(register_source::text, 'unknown') AS source, COUNT(*) AS signups
         FROM users
@@ -98,7 +100,7 @@ export async function getGrowth(params: PeriodInput) {
 
   return {
     period: meta(p),
-    trend: trend.map((r) => ({ date: String(r.date).slice(0, 10), signups: num(r.signups) })),
+    trend: trend.map((r) => ({ date: String(r.date).slice(0, 10), signups: num(r.signups), pctComplete: num(r.pct_complete) })),
     sources: sources.map((r) => ({ source: r.source as string, signups: num(r.signups) })),
   };
 }
@@ -109,7 +111,7 @@ export async function getGrowth(params: PeriodInput) {
 export async function getFunnel(params: PeriodInput) {
   const p = resolvePeriod(params, [1, 7, 28, 90], 28);
 
-  const [cur, prev, completion] = await Promise.all([
+  const [cur, prev] = await Promise.all([
     sql`WITH cohort AS (
           SELECT id FROM users WHERE is_admin = false
             AND created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz
@@ -140,11 +142,6 @@ export async function getFunnel(params: PeriodInput) {
         LEFT JOIN likes    l   ON l.liker_id = c.id
         LEFT JOIN likes    m   ON m.liker_id = c.id AND m.is_match = true
         LEFT JOIN messages msg ON msg.sender_id = c.id AND msg.message_type = 'user'`,
-    sql`SELECT u.created_at::date AS date, COUNT(*) AS registered,
-          ROUND(100.0 * COUNT(*) FILTER (WHERE p.is_complete) / NULLIF(COUNT(*),0), 1) AS pct_complete
-        FROM users u LEFT JOIN profiles p ON p.user_id = u.id
-        WHERE u.is_admin = false AND u.created_at >= CURRENT_DATE - (INTERVAL '1 day' * 14)
-        GROUP BY u.created_at::date ORDER BY date`,
   ]);
 
   const c = cur[0];
@@ -165,7 +162,6 @@ export async function getFunnel(params: PeriodInput) {
       pctOfTop: Math.round((100 * s.users) / top),
       stepConversion: i === 0 ? 100 : Math.round((100 * s.users) / (stages[i - 1].users || 1)),
     })),
-    completion: completion.map((r) => ({ date: String(r.date).slice(0, 10), pct_complete: num(r.pct_complete) })),
   };
 }
 

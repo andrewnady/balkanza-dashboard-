@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMetrics, SESSION_ASOF, PeriodFilter, PeriodValue, SectionHead, CardSkeleton, ErrorNote, fmtInt, fmtPct } from "../ui/primitives";
-import { HBars, TrendLine } from "../ui/charts";
+import { HBars } from "../ui/charts";
 
 const RANGES = [
   { label: "Today", value: 1 },
@@ -61,7 +61,7 @@ export default function Funnel() {
         <ErrorNote msg={error} />
       ) : (
         <div className="grid grid-3">
-          <div className="card col-span-2">
+          <div className="card col-span-3">
             <p className="card-title">Funnel — distinct users per stage</p>
             <p className="card-note">
               Bars = this period&apos;s cohort. Table compares each stage with {prevLabel}.
@@ -104,15 +104,6 @@ export default function Funnel() {
                   </table>
                 </div>
               </>
-            )}
-          </div>
-          <div className="card">
-            <p className="card-title">Profile completion trend</p>
-            <p className="card-note">% of daily registrants completing their profile (14d).</p>
-            {loading || !data ? (
-              <CardSkeleton height={220} />
-            ) : (
-              <TrendLine data={data.completion} xKey="date" yKey="pct_complete" color="var(--series-2)" valueFmt={fmtPct} domain={[0, 100]} />
             )}
           </div>
         </div>
