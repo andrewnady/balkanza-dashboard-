@@ -43,7 +43,7 @@ function periodQuery(v: PeriodValue): string {
 }
 
 export default function Monetization() {
-  const [period, setPeriod] = useState<PeriodValue>({ days: 1 });
+  const [period, setPeriod] = useState<PeriodValue>({ days: 30 });
   const { data, error, loading } = useMetrics<any>("monetization", period);
   const label = periodLabel(period);
   const buyersHref = (type: string) => `/buyers?type=${encodeURIComponent(type)}&${periodQuery(period)}&asof=${encodeURIComponent(SESSION_ASOF)}`;
