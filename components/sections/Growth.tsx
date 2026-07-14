@@ -13,7 +13,7 @@ const RANGES = [
 ];
 
 export default function Growth() {
-  const [period, setPeriod] = useState<PeriodValue>({ days: 1 });
+  const [period, setPeriod] = useState<PeriodValue>({ days: 7 });
   const { data, error, loading } = useMetrics<any>("growth", period);
 
   return (
