@@ -60,8 +60,8 @@ export default function Funnel() {
       {error ? (
         <ErrorNote msg={error} />
       ) : (
-        <div className="grid grid-3">
-          <div className="card col-span-3">
+        <div>
+          <div className="card">
             <p className="card-title">Funnel — distinct users per stage</p>
             <p className="card-note">
               Bars = this period&apos;s cohort. Table compares each stage with {prevLabel}.
