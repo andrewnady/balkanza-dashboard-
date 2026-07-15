@@ -21,7 +21,7 @@ const meta = (p: Period) => ({ mode: p.mode, days: p.days, label: p.label, prevL
 export async function getOverview(params: PeriodInput) {
   const p = resolvePeriod(params, [1, 7, 30, 90], 30);
 
-  const [signups, active, revenue, matches, subs, conversion] = await Promise.all([
+  const [signups, active, revenue, matches, subs, conversion, online] = await Promise.all([
     sql`SELECT
           COUNT(*) FILTER (WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz)         AS cur,
           COUNT(*) FILTER (WHERE created_at >= ${p.prevStart}::timestamptz AND created_at < ${p.prevEndEx}::timestamptz) AS prev
@@ -65,6 +65,9 @@ export async function getOverview(params: PeriodInput) {
         FROM users u
         LEFT JOIN (SELECT DISTINCT user_id FROM user_subscriptions WHERE status = 'active') s ON s.user_id = u.id
         WHERE u.is_admin = false`,
+    // Live "online now" — active in the last 5 minutes. Not window-scoped.
+    sql`SELECT COUNT(*) AS n FROM users
+        WHERE is_admin = false AND is_disabled = false AND last_active_at >= NOW() - INTERVAL '5 minutes'`,
   ]);
 
   const pv = (v: number) => (p.hasPrev ? v : null);
@@ -74,6 +77,7 @@ export async function getOverview(params: PeriodInput) {
 
   return {
     period: meta(p),
+    onlineNow: num(online[0].n),
     tiles: [
       { key: "signups", label: "New sign-ups", value: num(signups[0].cur), prev: pv(num(signups[0].prev)), format: "int" },
       { key: "active", label: "Active users", value: num(active[0].cur), prev: pv(num(active[0].prev)), format: "int" },
@@ -246,11 +250,12 @@ export async function getEngagement(params: PeriodInput) {
 export async function getUsers(params: PeriodInput, typeIn: unknown) {
   // Broad allow-list so any section's preset window (incl. 14/28) passes through.
   const p = resolvePeriod(params, [1, 7, 14, 28, 30, 90], 30);
-  const allowed = ["signups", "active", "completed", "liked", "matched", "messaged"];
+  const allowed = ["signups", "active", "online", "completed", "liked", "matched", "messaged"];
   const type = allowed.includes(String(typeIn)) ? String(typeIn) : "signups";
 
-  // 'active' = last_active in window; everything else = signup cohort in window,
-  // optionally filtered to a funnel stage.
+  // 'online' = active in the last 5 min (live, not window-scoped); 'active' =
+  // last_active in window; everything else = signup cohort in window, optionally
+  // filtered to a funnel stage.
   const rows = await sql`
     SELECT u.id,
       NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), '') AS name,
@@ -260,9 +265,11 @@ export async function getUsers(params: PeriodInput, typeIn: unknown) {
     FROM users u
     WHERE u.is_admin = false
       AND (
-        (${type} = 'active'
+        (${type} = 'online'
+          AND u.is_disabled = false AND u.last_active_at >= NOW() - INTERVAL '5 minutes')
+        OR (${type} = 'active'
           AND u.is_disabled = false AND u.last_active_at >= ${p.start}::timestamptz AND u.last_active_at < ${p.endEx}::timestamptz)
-        OR (${type} <> 'active'
+        OR (${type} NOT IN ('active', 'online')
           AND u.created_at >= ${p.start}::timestamptz AND u.created_at < ${p.endEx}::timestamptz
           AND (${type} <> 'completed' OR EXISTS (SELECT 1 FROM profiles pr WHERE pr.user_id = u.id AND pr.is_complete))
           AND (${type} <> 'liked'     OR EXISTS (SELECT 1 FROM likes l WHERE l.liker_id = u.id))
@@ -270,7 +277,7 @@ export async function getUsers(params: PeriodInput, typeIn: unknown) {
           AND (${type} <> 'messaged'  OR EXISTS (SELECT 1 FROM messages m WHERE m.sender_id = u.id AND m.message_type = 'user'))
         )
       )
-    ORDER BY (CASE WHEN ${type} = 'active' THEN u.last_active_at ELSE u.created_at END) DESC NULLS LAST
+    ORDER BY (CASE WHEN ${type} IN ('active', 'online') THEN u.last_active_at ELSE u.created_at END) DESC NULLS LAST
     LIMIT 500`;
 
   return {

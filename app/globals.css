@@ -279,6 +279,21 @@ a.brand:hover .brand-word { color: var(--accent); }
 .card-link { color: var(--accent); font-weight: 600; font-size: 12.5px; text-decoration: none; white-space: nowrap; }
 .card-link:hover { text-decoration: underline; }
 
+.live-pill {
+  display: inline-flex; align-items: center; gap: 7px; text-decoration: none;
+  background: rgba(12,163,12,0.10); color: var(--good-text);
+  border: 1px solid rgba(12,163,12,0.28); border-radius: 999px;
+  padding: 5px 12px; font-size: 13px; font-weight: 600; white-space: nowrap;
+}
+.live-pill:hover { background: rgba(12,163,12,0.16); }
+.live-pill strong { font-weight: 700; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: #0ca30c; box-shadow: 0 0 0 0 rgba(12,163,12,0.6); animation: live-pulse 1.8s ease-out infinite; }
+@keyframes live-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(12,163,12,0.55); }
+  70% { box-shadow: 0 0 0 7px rgba(12,163,12,0); }
+  100% { box-shadow: 0 0 0 0 rgba(12,163,12,0); }
+}
+
 .chart-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; padding-left: 8px; }
 .legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
 .legend-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }

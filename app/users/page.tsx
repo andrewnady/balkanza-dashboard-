@@ -10,6 +10,7 @@ const profileUrl = (id: string) => PROFILE_URL.replace("{id}", encodeURIComponen
 const TITLES: Record<string, string> = {
   signups: "New sign-ups",
   active: "Active users",
+  online: "Online now",
   completed: "Completed profile",
   liked: "Sent a like",
   matched: "Got a match",
@@ -57,8 +58,9 @@ function UsersContent() {
                 {data ? (
                   <>
                     {fmtInt(data.rows.length)}
-                    {data.rows.length === 500 ? " (first 500)" : ""} user{data.rows.length === 1 ? "" : "s"} · window:{" "}
-                    <strong>{data.period.label}</strong> · {type === "active" ? "sorted by last active" : "sorted by signup time"} · click a name to open the profile.
+                    {data.rows.length === 500 ? " (first 500)" : ""} user{data.rows.length === 1 ? "" : "s"} ·{" "}
+                    {type === "online" ? <strong>live · active in the last 5 minutes</strong> : <>window: <strong>{data.period.label}</strong></>} ·{" "}
+                    {type === "active" || type === "online" ? "sorted by last active" : "sorted by signup time"} · click a name to open the profile.
                   </>
                 ) : (
                   "Loading…"

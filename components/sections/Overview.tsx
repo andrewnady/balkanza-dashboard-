@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMetrics, SESSION_ASOF, PeriodFilter, PeriodValue, StatTile, SectionHead, CardSkeleton, ErrorNote } from "../ui/primitives";
+import { useMetrics, SESSION_ASOF, PeriodFilter, PeriodValue, StatTile, SectionHead, CardSkeleton, ErrorNote, fmtInt } from "../ui/primitives";
 
 const RANGES = [
   { label: "Today", value: 1 },
@@ -32,6 +32,12 @@ export default function Overview({ onFetched }: { onFetched?: (t: string | null)
   return (
     <section className="section" id="overview">
       <SectionHead id="overview-h" title="Overview" desc="The headline numbers, current period vs the one before it.">
+        {data && (
+          <a className="live-pill" href="/users?type=online" title="Users active in the last 5 minutes">
+            <span className="live-dot" />
+            <strong>{fmtInt(data.onlineNow)}</strong> online now
+          </a>
+        )}
         <span className="filter-label">Period</span>
         <PeriodFilter presets={RANGES} value={period} onChange={setPeriod} />
       </SectionHead>
