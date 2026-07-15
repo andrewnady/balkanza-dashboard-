@@ -290,6 +290,49 @@ export function StackedBars({
   );
 }
 
+/* ---- multi-series bars across two Y axes (e.g. views vs match-card views) ---- */
+export function MultiAxisBars({
+  data,
+  xKey,
+  series,
+  height = 260,
+  leftFmt,
+  rightFmt,
+}: {
+  data: any[];
+  xKey: string;
+  series: { key: string; name: string; color: string; axis: "left" | "right" }[];
+  height?: number;
+  leftFmt?: (v: number) => string;
+  rightFmt?: (v: number) => string;
+}) {
+  const hasRight = series.some((s) => s.axis === "right");
+  const fmtFor = (entry: any) => {
+    const s = series.find((x) => x.key === entry?.dataKey);
+    return s?.axis === "right" ? rightFmt : leftFmt;
+  };
+  const fmt = (value: number, entry: any) => {
+    const f = fmtFor(entry);
+    return f ? f(value) : String(value);
+  };
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <ComposedChart data={data} margin={{ top: 6, right: 4, left: -8, bottom: 0 }}>
+        <CartesianGrid stroke={GRID} vertical={false} />
+        <XAxis dataKey={xKey} tick={{ fill: AXIS, fontSize: 11 }} tickLine={false} axisLine={{ stroke: GRID }} minTickGap={24} />
+        <YAxis yAxisId="left" tick={{ fill: AXIS, fontSize: 11 }} tickLine={false} axisLine={false} width={48} tickFormatter={leftFmt} />
+        {hasRight && (
+          <YAxis yAxisId="right" orientation="right" tick={{ fill: AXIS, fontSize: 11 }} tickLine={false} axisLine={false} width={44} tickFormatter={rightFmt} />
+        )}
+        <Tooltip cursor={{ fill: "var(--surface-2)" }} content={<TooltipBox valueFmt={fmt} />} />
+        {series.map((s) => (
+          <Bar key={s.key} yAxisId={s.axis} dataKey={s.key} name={s.name} fill={s.color} radius={[3, 3, 0, 0]} maxBarSize={16} />
+        ))}
+      </ComposedChart>
+    </ResponsiveContainer>
+  );
+}
+
 export const SERIES = [
   "var(--series-1)",
   "var(--series-2)",

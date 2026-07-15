@@ -1219,3 +1219,66 @@ export async function getIncompleteUsers(stepIn: unknown) {
     })),
   };
 }
+
+/* ------------------------------------------------------------------ */
+/* VIEWS & BOOSTS — daily discovery volume + boost impact              */
+/* ------------------------------------------------------------------ */
+export async function getViewsBoosts(params: PeriodInput) {
+  const p = resolvePeriod(params, [7, 14, 30, 90], 30);
+
+  const [views, boosts, matches] = await Promise.all([
+    sql`SELECT created_at::date AS d,
+          COUNT(*) FILTER (WHERE view_type = 'profile')    AS profile_views,
+          COUNT(*) FILTER (WHERE view_type = 'match_card') AS match_card_views,
+          COUNT(*) FILTER (WHERE boost_id IS NOT NULL)     AS boosted_views
+        FROM view_events
+        WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz
+        GROUP BY 1`,
+    sql`SELECT started_at::date AS d, COUNT(*) AS boosts
+        FROM profile_boosts
+        WHERE started_at >= ${p.start}::timestamptz AND started_at < ${p.endEx}::timestamptz
+        GROUP BY 1`,
+    // Distinct matched pairs per day (each match is two like rows — dedupe).
+    sql`SELECT mn::date AS d, COUNT(*) AS matches FROM (
+          SELECT MIN(created_at) AS mn FROM likes WHERE is_match = true
+          GROUP BY LEAST(liker_id, liked_id), GREATEST(liker_id, liked_id)
+        ) t
+        WHERE mn >= ${p.start}::timestamptz AND mn < ${p.endEx}::timestamptz
+        GROUP BY 1`,
+  ]);
+
+  const isoDay = (v: unknown) => new Date(v as any).toISOString().slice(0, 10);
+  const vMap = new Map(views.map((r) => [isoDay(r.d), r]));
+  const bMap = new Map(boosts.map((r) => [isoDay(r.d), r]));
+  const mMap = new Map(matches.map((r) => [isoDay(r.d), r]));
+
+  const daily: any[] = [];
+  for (let d = p.startDate; d < p.endExDate; d = nextDay(d)) {
+    const v = vMap.get(d);
+    const profileViews = v ? num(v.profile_views) : 0;
+    const matchCardViews = v ? num(v.match_card_views) : 0;
+    daily.push({
+      date: d,
+      profileViews,
+      matchCardViews,
+      totalViews: profileViews + matchCardViews,
+      boostedViews: v ? num(v.boosted_views) : 0,
+      boosts: bMap.has(d) ? num(bMap.get(d)!.boosts) : 0,
+      matches: mMap.has(d) ? num(mMap.get(d)!.matches) : 0,
+    });
+  }
+
+  const sum = (k: string) => daily.reduce((a, r) => a + r[k], 0);
+  return {
+    period: meta(p),
+    daily,
+    totals: {
+      profileViews: sum("profileViews"),
+      matchCardViews: sum("matchCardViews"),
+      totalViews: sum("totalViews"),
+      boostedViews: sum("boostedViews"),
+      boosts: sum("boosts"),
+      matches: sum("matches"),
+    },
+  };
+}

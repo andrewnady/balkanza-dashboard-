@@ -18,6 +18,7 @@ import {
   getSafetyUsers,
   getCompletionInsights,
   getIncompleteUsers,
+  getViewsBoosts,
 } from "@/lib/queries";
 
 export const runtime = "nodejs";
@@ -106,6 +107,9 @@ export async function GET(req: NextRequest) {
         break;
       case "incomplete-users":
         data = await getIncompleteUsers(searchParams.get("step"));
+        break;
+      case "views-boosts":
+        data = await getViewsBoosts(period);
         break;
       default:
         return NextResponse.json({ error: `Unknown section: ${section}` }, { status: 400 });
