@@ -294,6 +294,10 @@ a.brand:hover .brand-word { color: var(--accent); }
   100% { box-shadow: 0 0 0 0 rgba(12,163,12,0); }
 }
 
+.tbl.heatmap th, .tbl.heatmap td { text-align: center; }
+.tbl.heatmap th:first-child, .tbl.heatmap td:first-child { text-align: left; }
+.heat-cell { border-radius: 5px; padding: 7px 8px !important; font-variant-numeric: tabular-nums; }
+
 .chart-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; padding-left: 8px; }
 .legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
 .legend-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }

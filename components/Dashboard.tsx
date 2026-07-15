@@ -5,8 +5,11 @@ import Overview from "./sections/Overview";
 import Growth from "./sections/Growth";
 import Funnel from "./sections/Funnel";
 import Engagement from "./sections/Engagement";
+import Conversations from "./sections/Conversations";
 import Discovery from "./sections/Discovery";
 import Diagnostics from "./sections/Diagnostics";
+import Marketplace from "./sections/Marketplace";
+import RetentionCohorts from "./sections/RetentionCohorts";
 import Liquidity from "./sections/Liquidity";
 import Monetization from "./sections/Monetization";
 import Safety from "./sections/Safety";
@@ -15,8 +18,11 @@ const NAV = [
   { id: "overview", label: "Overview" },
   { id: "growth", label: "Growth" },
   { id: "funnel", label: "Funnel" },
+  { id: "retention", label: "Retention" },
   { id: "engagement", label: "Engagement" },
+  { id: "conversations", label: "Conversations" },
   { id: "discovery", label: "Discovery" },
+  { id: "marketplace", label: "Marketplace" },
   { id: "diagnostics", label: "Diagnostics" },
   { id: "liquidity", label: "Liquidity" },
   { id: "monetization", label: "Monetization" },
@@ -82,8 +88,11 @@ export default function Dashboard() {
         <Overview onFetched={setFetchedAt} />
         <Growth />
         <Funnel />
+        <RetentionCohorts />
         <Engagement />
+        <Conversations />
         <Discovery />
+        <Marketplace />
         <Diagnostics />
         <Liquidity />
         <Monetization />

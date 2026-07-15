@@ -19,6 +19,9 @@ import {
   getCompletionInsights,
   getIncompleteUsers,
   getViewsBoosts,
+  getMarketplace,
+  getConversationFunnel,
+  getRetentionCohorts,
 } from "@/lib/queries";
 
 export const runtime = "nodejs";
@@ -110,6 +113,15 @@ export async function GET(req: NextRequest) {
         break;
       case "views-boosts":
         data = await getViewsBoosts(period);
+        break;
+      case "marketplace":
+        data = await getMarketplace();
+        break;
+      case "conversations":
+        data = await getConversationFunnel();
+        break;
+      case "retention-cohorts":
+        data = await getRetentionCohorts();
         break;
       default:
         return NextResponse.json({ error: `Unknown section: ${section}` }, { status: 400 });

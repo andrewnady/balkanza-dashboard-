@@ -1284,3 +1284,143 @@ export async function getViewsBoosts(params: PeriodInput) {
     },
   };
 }
+
+/* ------------------------------------------------------------------ */
+/* MARKETPLACE — liquidity balance & attention inequality              */
+/* ------------------------------------------------------------------ */
+export async function getMarketplace() {
+  const [ratio, zero, conc, dist] = await Promise.all([
+    // Active gender balance (last 7 days).
+    sql`SELECT lower(pr.gender) g, COUNT(*) n
+        FROM users u JOIN profiles pr ON pr.user_id = u.id
+        WHERE u.is_admin = false AND u.is_disabled = false AND u.last_active_at >= NOW() - INTERVAL '7 days'
+          AND lower(pr.gender) IN ('male','female')
+        GROUP BY 1`,
+    // Of users active in the last 30 days, how many never matched.
+    sql`WITH act AS (SELECT u.id, lower(pr.gender) g FROM users u JOIN profiles pr ON pr.user_id = u.id
+          WHERE u.is_admin = false AND u.is_disabled = false AND u.last_active_at >= NOW() - INTERVAL '30 days'
+            AND lower(pr.gender) IN ('male','female'))
+        SELECT g, COUNT(*) active,
+          COUNT(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM likes l WHERE l.is_match AND (l.liker_id = act.id OR l.liked_id = act.id))) zero
+        FROM act GROUP BY 1`,
+    // Attention concentration: share of likes received captured by the top 10% of women.
+    sql`WITH recv AS (
+          SELECT l.liked_id uid, COUNT(*) c FROM likes l JOIN profiles pr ON pr.user_id = l.liked_id
+          WHERE lower(pr.gender) = 'female' GROUP BY 1)
+        SELECT COUNT(*) women, SUM(c) total_likes,
+          ROUND(100.0 * SUM(c) FILTER (WHERE rnk <= n10) / NULLIF(SUM(c),0),1) top10_share,
+          ROUND(100.0 * SUM(c) FILTER (WHERE rnk <= n1)  / NULLIF(SUM(c),0),1) top1_share
+        FROM (SELECT c, ROW_NUMBER() OVER (ORDER BY c DESC) rnk,
+                     CEIL(0.1*COUNT(*) OVER())::int n10, CEIL(0.01*COUNT(*) OVER())::int n1 FROM recv) t`,
+    // Matches-per-active-user distribution, split by gender.
+    sql`WITH act AS (SELECT u.id, lower(pr.gender) g FROM users u JOIN profiles pr ON pr.user_id = u.id
+          WHERE u.is_admin = false AND u.is_disabled = false AND u.last_active_at >= NOW() - INTERVAL '30 days'
+            AND lower(pr.gender) IN ('male','female')),
+        mp AS (SELECT LEAST(liker_id,liked_id) a, GREATEST(liker_id,liked_id) b FROM likes WHERE is_match GROUP BY 1,2),
+        mc AS (SELECT uid, COUNT(*) matches FROM (SELECT a uid FROM mp UNION ALL SELECT b uid FROM mp) x GROUP BY 1),
+        per_user AS (SELECT act.g, COALESCE(mc.matches,0) matches FROM act LEFT JOIN mc ON mc.uid = act.id)
+        SELECT g, CASE WHEN matches=0 THEN '0' WHEN matches=1 THEN '1' WHEN matches<=4 THEN '2-4'
+                       WHEN matches<=9 THEN '5-9' ELSE '10+' END bucket, COUNT(*) n
+        FROM per_user GROUP BY 1,2`,
+  ]);
+
+  const rg = (g: string) => num((ratio.find((r) => r.g === g) || {}).n);
+  const men = rg("male");
+  const women = rg("female");
+  const z = (g: string) => {
+    const r = zero.find((x) => x.g === g) || {};
+    const active = num(r.active);
+    return { active, zero: num(r.zero), pct: active ? Math.round((1000 * num(r.zero)) / active) / 10 : 0 };
+  };
+  const c = conc[0] || {};
+
+  const BUCKETS = ["0", "1", "2-4", "5-9", "10+"];
+  const distribution = BUCKETS.map((bucket) => {
+    const male = num((dist.find((d) => d.g === "male" && d.bucket === bucket) || {}).n);
+    const female = num((dist.find((d) => d.g === "female" && d.bucket === bucket) || {}).n);
+    return { bucket, male, female };
+  });
+
+  return {
+    genderRatio: { men, women, ratio: women ? Math.round((10 * men) / women) / 10 : 0 },
+    zeroMatch: { male: z("male"), female: z("female") },
+    concentration: { women: num(c.women), totalLikes: num(c.total_likes), top10Share: num(c.top10_share), top1Share: num(c.top1_share) },
+    distribution,
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* CONVERSATIONS — match → message → reply → sustained funnel           */
+/* ------------------------------------------------------------------ */
+export async function getConversationFunnel() {
+  const rows = await sql`
+    WITH mp AS (SELECT LEAST(liker_id,liked_id) a, GREATEST(liker_id,liked_id) b, MIN(created_at) matched_at
+                FROM likes WHERE is_match GROUP BY 1,2),
+    msg AS (SELECT LEAST(sender_id,receiver_id) a, GREATEST(sender_id,receiver_id) b,
+              COUNT(*) FILTER (WHERE message_type IN ('user','one_time_service')) msgs,
+              COUNT(DISTINCT sender_id) FILTER (WHERE message_type IN ('user','one_time_service')) senders,
+              MIN(created_at) FILTER (WHERE message_type IN ('user','one_time_service')) first_msg
+            FROM messages GROUP BY 1,2)
+    SELECT COUNT(*) matches,
+      COUNT(*) FILTER (WHERE COALESCE(msg.senders,0) >= 1) messaged,
+      COUNT(*) FILTER (WHERE msg.senders = 2) replied,
+      COUNT(*) FILTER (WHERE COALESCE(msg.msgs,0) >= 4) sustained,
+      ROUND(percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(epoch FROM (msg.first_msg - mp.matched_at))/3600)
+            FILTER (WHERE msg.first_msg IS NOT NULL)::numeric, 1) median_hrs,
+      ROUND(AVG(msg.msgs) FILTER (WHERE msg.senders = 2)::numeric, 1) avg_msgs_two_way
+    FROM mp LEFT JOIN msg ON msg.a = mp.a AND msg.b = mp.b`;
+
+  const r = rows[0];
+  const matches = num(r.matches);
+  const pct = (n: number) => (matches ? Math.round((1000 * n) / matches) / 10 : 0);
+  const messaged = num(r.messaged);
+  const replied = num(r.replied);
+  const sustained = num(r.sustained);
+  return {
+    funnel: [
+      { stage: "Matched", value: matches, pctOfMatches: 100 },
+      { stage: "Someone messaged", value: messaged, pctOfMatches: pct(messaged) },
+      { stage: "Got a reply", value: replied, pctOfMatches: pct(replied) },
+      { stage: "Sustained (4+ msgs)", value: sustained, pctOfMatches: pct(sustained) },
+    ],
+    replyRate: messaged ? Math.round((1000 * replied) / messaged) / 10 : 0,
+    medianHrsToFirst: num(r.median_hrs),
+    avgMsgsTwoWay: num(r.avg_msgs_two_way),
+    deadPct: pct(matches - messaged),
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* RETENTION COHORTS — weekly signup cohort × weeks-since-signup        */
+/* ------------------------------------------------------------------ */
+export async function getRetentionCohorts() {
+  // Activity = signed up, sent a like, or sent a message that week (so week 0
+  // is the cohort itself = 100%, and later weeks measure who came back to act).
+  const rows = await sql`
+    WITH cohort AS (SELECT id, date_trunc('week', created_at)::date wk FROM users
+                    WHERE is_admin = false AND created_at >= date_trunc('week', NOW()) - INTERVAL '7 weeks'),
+    sizes AS (SELECT wk, COUNT(*) size FROM cohort GROUP BY 1),
+    act AS (
+      SELECT id uid, date_trunc('week', created_at)::date wk FROM users WHERE is_admin = false
+      UNION SELECT liker_id, date_trunc('week', created_at)::date FROM likes
+      UNION SELECT sender_id, date_trunc('week', created_at)::date FROM messages WHERE message_type = 'user'
+    ),
+    grid AS (SELECT c.wk cohort_week, ((a.wk - c.wk)/7) week_no, COUNT(DISTINCT c.id) active
+             FROM cohort c JOIN act a ON a.uid = c.id AND a.wk >= c.wk GROUP BY 1,2)
+    SELECT g.cohort_week, s.size, g.week_no, g.active, ROUND(100.0 * g.active / s.size, 1) pct
+    FROM grid g JOIN sizes s ON s.wk = g.cohort_week
+    WHERE g.week_no >= 0 ORDER BY 1, 3`;
+
+  const byCohort = new Map<string, { week: string; size: number; cells: Record<number, number> }>();
+  let maxWeek = 0;
+  for (const r of rows) {
+    const week = String(r.cohort_week).slice(0, 10);
+    const weekNo = num(r.week_no);
+    maxWeek = Math.max(maxWeek, weekNo);
+    if (!byCohort.has(week)) byCohort.set(week, { week, size: num(r.size), cells: {} });
+    byCohort.get(week)!.cells[weekNo] = num(r.pct);
+  }
+  // Newest cohort first.
+  const cohorts = [...byCohort.values()].sort((a, b) => (a.week < b.week ? 1 : -1));
+  return { cohorts, maxWeek };
+}
