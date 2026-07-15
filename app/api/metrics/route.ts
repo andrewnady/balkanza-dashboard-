@@ -16,6 +16,8 @@ import {
   getBuyers,
   getCancellations,
   getSafetyUsers,
+  getCompletionInsights,
+  getIncompleteUsers,
 } from "@/lib/queries";
 
 export const runtime = "nodejs";
@@ -98,6 +100,12 @@ export async function GET(req: NextRequest) {
         break;
       case "safety-users":
         data = await getSafetyUsers(period, searchParams.get("segment"));
+        break;
+      case "completion-insights":
+        data = await getCompletionInsights();
+        break;
+      case "incomplete-users":
+        data = await getIncompleteUsers(searchParams.get("step"));
         break;
       default:
         return NextResponse.json({ error: `Unknown section: ${section}` }, { status: 400 });

@@ -4,6 +4,14 @@ import { resolvePeriod, type PeriodInput, type Period } from "./period";
 // Helper: coerce Neon's string-typed numerics to JS numbers.
 const num = (v: unknown): number => (v === null || v === undefined ? 0 : Number(v));
 
+// Run a fully-formed SQL string (no bound params) through the tagged-template
+// client. Neon reads `strings.raw`, so a bare array won't do — build a real
+// TemplateStringsArray. Only pass trusted, non-user-derived SQL here.
+const rawSql = (text: string) => {
+  const strings = Object.assign([text], { raw: [text] }) as unknown as TemplateStringsArray;
+  return sql(strings);
+};
+
 // Compact period descriptor returned to the client for labels.
 const meta = (p: Period) => ({ mode: p.mode, days: p.days, label: p.label, prevLabel: p.prevLabel, hasPrev: p.hasPrev });
 
@@ -1081,6 +1089,124 @@ export async function getSafetyUsers(params: PeriodInput, segmentIn: unknown) {
       heritage: ((r.heritage as string[]) || []).join(", ") || "—",
       hasPhoto: Boolean(r.has_photo),
       bio: (r.bio as string | null) || null,
+      lastActive: r.last_active_at ? String(r.last_active_at) : null,
+      createdAt: r.created_at ? String(r.created_at) : null,
+    })),
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* COMPLETION INSIGHTS — why profiles don't finish onboarding          */
+/* ------------------------------------------------------------------ */
+
+// Onboarding fields in the order they are asked, with friendly labels. Used to
+// draw the "where do people stop filling" cascade. (religion/education/
+// cultural_values are excluded — they're 0% even for finished profiles, i.e.
+// no longer collected.)
+const COMPLETION_FIELDS: { key: string; label: string; expr: string }[] = [
+  { key: "birthdate", label: "Birthdate", expr: "birthdate IS NOT NULL" },
+  { key: "gender", label: "Gender", expr: "gender IS NOT NULL AND gender <> ''" },
+  { key: "interested_in", label: "Interested in", expr: "interested_in IS NOT NULL AND interested_in <> ''" },
+  { key: "heritage", label: "Heritage countries", expr: "heritage_countries IS NOT NULL AND cardinality(heritage_countries) > 0" },
+  { key: "residence", label: "Residence country", expr: "residence_country IS NOT NULL AND residence_country <> ''" },
+  { key: "current_city", label: "Current city", expr: "current_city IS NOT NULL AND current_city <> ''" },
+  { key: "languages", label: "Languages", expr: "languages IS NOT NULL AND cardinality(languages) > 0" },
+  { key: "relationship_goals", label: "Relationship goals", expr: "relationship_goals IS NOT NULL AND relationship_goals <> ''" },
+  { key: "wants_children", label: "Wants children", expr: "wants_children IS NOT NULL AND wants_children <> ''" },
+  { key: "smoking", label: "Smoking", expr: "smoking IS NOT NULL AND smoking <> ''" },
+  { key: "drinking", label: "Drinking", expr: "drinking IS NOT NULL AND drinking <> ''" },
+  { key: "favorite_food", label: "Favorite food", expr: "favorite_food IS NOT NULL AND favorite_food <> ''" },
+  { key: "kolo", label: "Can dance kolo", expr: "can_dance_kolo IS NOT NULL AND can_dance_kolo <> ''" },
+  { key: "rakija", label: "Rakija at 9am", expr: "rakija_at_9am IS NOT NULL AND rakija_at_9am <> ''" },
+  { key: "sarma", label: "Can roll sarma", expr: "can_roll_sarma IS NOT NULL AND can_roll_sarma <> ''" },
+  { key: "coffee", label: "Coffee order", expr: "coffee_order IS NOT NULL AND coffee_order <> ''" },
+  { key: "kafana", label: "Kafana time", expr: "kafana_time IS NOT NULL AND kafana_time <> ''" },
+  { key: "photo", label: "Photo uploaded", expr: "EXISTS(SELECT 1 FROM profile_photos pp WHERE pp.profile_id = profiles.id)" },
+  { key: "bio", label: "Bio written", expr: "bio IS NOT NULL AND bio <> ''" },
+];
+
+// Per-row expression counting how many of the above fields a profile filled.
+const ANSWERED_COUNT_EXPR = COMPLETION_FIELDS.map((f) => `(${f.expr})::int`).join(" + ");
+
+export async function getCompletionInsights() {
+  const fieldSelects = COMPLETION_FIELDS.map((f) => `COUNT(*) FILTER (WHERE ${f.expr}) AS ${f.key}`).join(",\n        ");
+
+  const [totals, steps, fields] = await Promise.all([
+    sql`SELECT
+          COUNT(*) AS total,
+          COUNT(*) FILTER (WHERE is_complete) AS complete,
+          COUNT(*) FILTER (WHERE NOT is_complete) AS incomplete,
+          COUNT(*) FILTER (WHERE NOT is_complete AND created_at <  NOW() - INTERVAL '7 days') AS abandoned,
+          COUNT(*) FILTER (WHERE NOT is_complete AND created_at >= NOW() - INTERVAL '7 days') AS recent
+        FROM profiles`,
+    sql`SELECT COALESCE(current_step, 0) AS step,
+          COUNT(*) FILTER (WHERE NOT is_complete) AS incomplete,
+          COUNT(*) FILTER (WHERE is_complete) AS complete
+        FROM profiles GROUP BY 1 ORDER BY 1`,
+    // Field fill counts + average fields answered, among incomplete profiles.
+    rawSql(`SELECT COUNT(*) AS n, ROUND(AVG(${ANSWERED_COUNT_EXPR}), 1) AS avg_fields, ${fieldSelects} FROM profiles WHERE is_complete = false`),
+  ]);
+
+  const t = totals[0];
+  const total = num(t.total);
+  const incomplete = num(t.incomplete);
+  const f = fields[0];
+  const n = num(f.n) || 1;
+
+  return {
+    totals: {
+      total,
+      complete: num(t.complete),
+      incomplete,
+      completionPct: total ? Math.round((1000 * num(t.complete)) / total) / 10 : 0,
+      incompletePct: total ? Math.round((1000 * incomplete) / total) / 10 : 0,
+      abandoned: num(t.abandoned),
+      recent: num(t.recent),
+      avgFields: num(f.avg_fields),
+      totalFields: COMPLETION_FIELDS.length,
+    },
+    steps: steps.map((r) => ({ step: num(r.step), incomplete: num(r.incomplete), complete: num(r.complete) })),
+    fieldFunnel: COMPLETION_FIELDS.map((fd) => ({
+      key: fd.key,
+      label: fd.label,
+      count: num(f[fd.key]),
+      pct: Math.round((1000 * num(f[fd.key])) / n) / 10,
+    })),
+  };
+}
+
+export async function getIncompleteUsers(stepIn: unknown) {
+  const step = stepIn != null && /^\d+$/.test(String(stepIn)) ? Number(stepIn) : null;
+
+  const rows = await rawSql(
+    `SELECT u.id,
+        NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), '') AS name,
+        u.email, u.last_active_at, profiles.created_at,
+        profiles.current_step, profiles.gender, profiles.birthdate,
+        profiles.heritage_countries AS heritage, profiles.residence_country AS residence,
+        (${ANSWERED_COUNT_EXPR}) AS answered,
+        EXISTS(SELECT 1 FROM profile_photos pp WHERE pp.profile_id = profiles.id) AS has_photo
+      FROM profiles JOIN users u ON u.id = profiles.user_id
+      WHERE profiles.is_complete = false AND u.is_admin = false
+        ${step != null ? `AND COALESCE(profiles.current_step,0) = ${step}` : ""}
+      ORDER BY profiles.created_at DESC
+      LIMIT 500`
+  );
+
+  return {
+    step,
+    totalFields: COMPLETION_FIELDS.length,
+    rows: rows.map((r) => ({
+      id: r.id as string,
+      name: r.name as string | null,
+      email: r.email as string | null,
+      currentStep: num(r.current_step),
+      answered: num(r.answered),
+      hasPhoto: Boolean(r.has_photo),
+      gender: (r.gender as string | null) || "—",
+      birthdate: r.birthdate ? String(r.birthdate).slice(0, 10) : null,
+      heritage: ((r.heritage as string[]) || []).join(", ") || "—",
+      residence: (r.residence as string | null)?.trim() || "—",
       lastActive: r.last_active_at ? String(r.last_active_at) : null,
       createdAt: r.created_at ? String(r.created_at) : null,
     })),

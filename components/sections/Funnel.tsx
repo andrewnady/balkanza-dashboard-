@@ -62,7 +62,10 @@ export default function Funnel() {
       ) : (
         <div>
           <div className="card">
-            <p className="card-title">Funnel — distinct users per stage</p>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+              <p className="card-title">Funnel — distinct users per stage</p>
+              <a className="card-link" href="/completion">Why aren&apos;t profiles completing? ↗</a>
+            </div>
             <p className="card-note">
               Bars = this period&apos;s cohort. Table compares each stage with {prevLabel}.
             </p>
