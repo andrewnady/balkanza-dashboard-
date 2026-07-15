@@ -1424,3 +1424,109 @@ export async function getRetentionCohorts() {
   const cohorts = [...byCohort.values()].sort((a, b) => (a.week < b.week ? 1 : -1));
   return { cohorts, maxWeek };
 }
+
+/* ------------------------------------------------------------------ */
+/* REVENUE HEALTH — MRR, churn, LTV, recovery, repeat buyers           */
+/* ------------------------------------------------------------------ */
+export async function getRevenueHealth() {
+  const [mrr, churn, ltv, refunds, recovery, repeat] = await Promise.all([
+    sql`SELECT COUNT(*) active_subs,
+          ROUND(SUM(us.amount / NULLIF(sp.duration_in_months,0))::numeric,2) mrr,
+          ROUND(AVG(us.amount)::numeric,2) avg_amount
+        FROM user_subscriptions us JOIN subscription_plans sp ON sp.id = us.plan_id WHERE us.status = 'active'`,
+    sql`WITH paid AS (SELECT DISTINCT subscription_id FROM subscription_payments WHERE status='succeeded')
+        SELECT COUNT(*) FILTER (WHERE us.status IN ('canceled','expired')
+                 AND COALESCE(us.canceled_at::timestamptz, us.current_period_end) >= NOW() - INTERVAL '30 days') ended_30d,
+               COUNT(*) FILTER (WHERE us.status='active') active_now
+        FROM user_subscriptions us WHERE us.id IN (SELECT subscription_id FROM paid)`,
+    sql`SELECT COUNT(DISTINCT user_id) payers, ROUND(SUM(amount)::numeric,2) total,
+          ROUND((SUM(amount)/NULLIF(COUNT(DISTINCT user_id),0))::numeric,2) rev_per_payer
+        FROM subscription_payments WHERE status='succeeded'`,
+    sql`SELECT COUNT(*) n, ROUND(COALESCE(SUM(refund_amount),0)::numeric,2) amount
+        FROM subscription_payments WHERE refunded_at IS NOT NULL`,
+    sql`WITH fails AS (SELECT subscription_id, MIN(created_at) first_fail FROM subscription_payments WHERE status<>'succeeded' GROUP BY 1)
+        SELECT COUNT(*) with_failure,
+          COUNT(*) FILTER (WHERE EXISTS(SELECT 1 FROM subscription_payments sp WHERE sp.subscription_id=fails.subscription_id AND sp.status='succeeded' AND sp.created_at > fails.first_fail)) recovered
+        FROM fails`,
+    sql`WITH b AS (SELECT user_id, COUNT(*) n FROM purchases WHERE payment_status='paid' GROUP BY 1)
+        SELECT COUNT(*) buyers, COUNT(*) FILTER (WHERE n>=2) repeat_buyers, ROUND(AVG(n)::numeric,1) avg_purchases FROM b`,
+  ]);
+
+  const mrrV = num(mrr[0].mrr);
+  const avgAmount = num(mrr[0].avg_amount);
+  const ended = num(churn[0].ended_30d);
+  const activeNow = num(churn[0].active_now);
+  const monthlyChurn = ended + activeNow ? Math.round((1000 * ended) / (ended + activeNow)) / 10 : 0;
+  const withFailure = num(recovery[0].with_failure);
+  const recovered = num(recovery[0].recovered);
+  const re = repeat[0];
+
+  return {
+    mrr: mrrV,
+    arr: Math.round(mrrV * 12 * 100) / 100,
+    activeSubs: num(mrr[0].active_subs),
+    avgAmount,
+    churn: { ended, activeNow, monthlyChurnPct: monthlyChurn },
+    // Rough LTV = average sub value / monthly churn rate.
+    ltv: monthlyChurn ? Math.round((avgAmount / (monthlyChurn / 100)) * 100) / 100 : 0,
+    revPerPayer: num(ltv[0].rev_per_payer),
+    payers: num(ltv[0].payers),
+    totalSubRevenue: num(ltv[0].total),
+    refunds: { count: num(refunds[0].n), amount: num(refunds[0].amount) },
+    recovery: {
+      withFailure,
+      recovered,
+      lost: withFailure - recovered,
+      recoveredPct: withFailure ? Math.round((1000 * recovered) / withFailure) / 10 : 0,
+    },
+    repeat: {
+      buyers: num(re.buyers),
+      repeatBuyers: num(re.repeat_buyers),
+      repeatPct: num(re.buyers) ? Math.round((1000 * num(re.repeat_buyers)) / num(re.buyers)) / 10 : 0,
+      avgPurchases: num(re.avg_purchases),
+    },
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* RE-ENGAGEMENT & AI — push reach + AI matchmaker performance          */
+/* ------------------------------------------------------------------ */
+export async function getReengagement() {
+  const [reach, platform, ai] = await Promise.all([
+    sql`SELECT (SELECT COUNT(*) FROM users WHERE is_admin=false) total_users,
+          (SELECT COUNT(DISTINCT user_id) FROM push_notification_tokens) with_token,
+          (SELECT COUNT(DISTINCT pt.user_id) FROM push_notification_tokens pt JOIN users u ON u.id=pt.user_id
+             WHERE u.last_active_at >= NOW() - INTERVAL '30 days') active_with_token,
+          (SELECT COUNT(*) FROM users u WHERE u.is_admin=false AND u.is_disabled=false
+             AND u.last_active_at < NOW() - INTERVAL '7 days'
+             AND NOT EXISTS(SELECT 1 FROM push_notification_tokens pt WHERE pt.user_id=u.id)) dormant_unreachable`,
+    sql`SELECT lower(platform) platform, COUNT(DISTINCT user_id) n FROM push_notification_tokens GROUP BY 1 ORDER BY 2 DESC`,
+    sql`SELECT COUNT(*) total, COUNT(*) FILTER (WHERE chat_initiated) chat_initiated,
+          ROUND(AVG(compatibility_score)::numeric,1) avg_score,
+          (SELECT COUNT(*) FROM ai_match_feedback) feedback
+        FROM ai_match_events`,
+  ]);
+
+  const r = reach[0];
+  const totalUsers = num(r.total_users);
+  const withToken = num(r.with_token);
+  const a = ai[0];
+  const aiTotal = num(a.total);
+  return {
+    reach: {
+      totalUsers,
+      withToken,
+      reachPct: totalUsers ? Math.round((1000 * withToken) / totalUsers) / 10 : 0,
+      activeWithToken: num(r.active_with_token),
+      dormantUnreachable: num(r.dormant_unreachable),
+      byPlatform: platform.map((p) => ({ platform: (p.platform as string) || "unknown", users: num(p.n) })),
+    },
+    ai: {
+      total: aiTotal,
+      chatInitiated: num(a.chat_initiated),
+      chatRate: aiTotal ? Math.round((1000 * num(a.chat_initiated)) / aiTotal) / 10 : 0,
+      avgScore: num(a.avg_score),
+      feedback: num(a.feedback),
+    },
+  };
+}

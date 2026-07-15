@@ -22,6 +22,8 @@ import {
   getMarketplace,
   getConversationFunnel,
   getRetentionCohorts,
+  getRevenueHealth,
+  getReengagement,
 } from "@/lib/queries";
 
 export const runtime = "nodejs";
@@ -122,6 +124,12 @@ export async function GET(req: NextRequest) {
         break;
       case "retention-cohorts":
         data = await getRetentionCohorts();
+        break;
+      case "revenue-health":
+        data = await getRevenueHealth();
+        break;
+      case "reengagement":
+        data = await getReengagement();
         break;
       default:
         return NextResponse.json({ error: `Unknown section: ${section}` }, { status: 400 });

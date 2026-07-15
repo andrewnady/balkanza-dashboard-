@@ -10,8 +10,10 @@ import Discovery from "./sections/Discovery";
 import Diagnostics from "./sections/Diagnostics";
 import Marketplace from "./sections/Marketplace";
 import RetentionCohorts from "./sections/RetentionCohorts";
+import Reengagement from "./sections/Reengagement";
 import Liquidity from "./sections/Liquidity";
 import Monetization from "./sections/Monetization";
+import RevenueHealth from "./sections/RevenueHealth";
 import Safety from "./sections/Safety";
 
 const NAV = [
@@ -26,6 +28,8 @@ const NAV = [
   { id: "diagnostics", label: "Diagnostics" },
   { id: "liquidity", label: "Liquidity" },
   { id: "monetization", label: "Monetization" },
+  { id: "revenue-health", label: "Revenue health" },
+  { id: "reengagement", label: "Re-engagement & AI" },
   { id: "safety", label: "Trust & Safety" },
 ];
 
@@ -96,6 +100,8 @@ export default function Dashboard() {
         <Diagnostics />
         <Liquidity />
         <Monetization />
+        <RevenueHealth />
+        <Reengagement />
         <Safety />
 
         <footer className="footer">
