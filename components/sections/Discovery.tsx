@@ -53,7 +53,7 @@ export default function Discovery() {
             <StatTile label="Match-card views" value={data.totals.matchCardViews} sub={label} format="int" />
             <StatTile label="Profile views" value={data.totals.profileViews} sub={label} format="int" />
             <StatTile label="Boosts activated" value={data.totals.boosts} sub={label} format="int" />
-            <StatTile label="Views from boosts" value={data.totals.boostedViews} sub="attributed to a boost" format="int" />
+            <StatTile label="Views from boosts" value={data.totals.boostedViews} sub={`${fmtInt(data.totals.matches)} matches from boosts`} format="int" />
           </div>
 
           <div className="grid grid-2">
@@ -76,20 +76,20 @@ export default function Discovery() {
 
             <div className="card">
               <p className="card-title">Boost performance &amp; engagement · {label}</p>
-              <p className="card-note">Daily boosts (left axis) vs. views those boosts generated &amp; matches (right axis) — to judge boost impact.</p>
+              <p className="card-note">Daily boosts (left axis) vs. the views &amp; matches those boosts generated (right axis) — everything attributed to a boost, to judge boost impact.</p>
               <MultiAxisBars
                 data={data.daily}
                 xKey="date"
                 series={[
                   { key: "boosts", name: "Boosts", color: BOOST_PURPLE, axis: "left" },
                   { key: "boostedViews", name: "Views from boosts", color: PROFILE_BLUE, axis: "right" },
-                  { key: "matches", name: "Matches", color: MATCHCARD_RED, axis: "right" },
+                  { key: "matches", name: "Matches from boosts", color: MATCHCARD_RED, axis: "right" },
                 ]}
                 leftFmt={fmtInt}
                 rightFmt={fmtInt}
                 height={280}
               />
-              <Legend items={[{ name: "Boosts", color: BOOST_PURPLE }, { name: "Views from boosts", color: PROFILE_BLUE }, { name: "Matches", color: MATCHCARD_RED }]} />
+              <Legend items={[{ name: "Boosts", color: BOOST_PURPLE }, { name: "Views from boosts", color: PROFILE_BLUE }, { name: "Matches from boosts", color: MATCHCARD_RED }]} />
             </div>
           </div>
         </>

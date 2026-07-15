@@ -1238,9 +1238,11 @@ export async function getViewsBoosts(params: PeriodInput) {
         FROM profile_boosts
         WHERE started_at >= ${p.start}::timestamptz AND started_at < ${p.endEx}::timestamptz
         GROUP BY 1`,
-    // Distinct matched pairs per day (each match is two like rows — dedupe).
+    // Matches ATTRIBUTED TO A BOOST per day: distinct matched pairs where a
+    // boosted like (boost_id set) is involved. This measures boost impact, not
+    // total app matches. Each match is two like rows — dedupe by pair.
     sql`SELECT mn::date AS d, COUNT(*) AS matches FROM (
-          SELECT MIN(created_at) AS mn FROM likes WHERE is_match = true
+          SELECT MIN(created_at) AS mn FROM likes WHERE is_match = true AND boost_id IS NOT NULL
           GROUP BY LEAST(liker_id, liked_id), GREATEST(liker_id, liked_id)
         ) t
         WHERE mn >= ${p.start}::timestamptz AND mn < ${p.endEx}::timestamptz
