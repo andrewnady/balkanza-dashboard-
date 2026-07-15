@@ -1431,7 +1431,7 @@ export async function getRetentionCohorts() {
 /* REVENUE HEALTH — MRR, churn, LTV, recovery, repeat buyers           */
 /* ------------------------------------------------------------------ */
 export async function getRevenueHealth() {
-  const [mrr, churn, ltv, refunds, recovery, repeat] = await Promise.all([
+  const [mrr, churn, ltv, refunds, recovery, repeat, paid] = await Promise.all([
     sql`SELECT COUNT(*) active_subs,
           ROUND(SUM(us.amount / NULLIF(sp.duration_in_months,0))::numeric,2) mrr,
           ROUND(AVG(us.amount)::numeric,2) avg_amount
@@ -1452,6 +1452,12 @@ export async function getRevenueHealth() {
         FROM fails`,
     sql`WITH b AS (SELECT user_id, COUNT(*) n FROM purchases WHERE payment_status='paid' GROUP BY 1)
         SELECT COUNT(*) buyers, COUNT(*) FILTER (WHERE n>=2) repeat_buyers, ROUND(AVG(n)::numeric,1) avg_purchases FROM b`,
+    // Paid users with premium access right now: active + those who cancelled but
+    // are still inside their paid period ("pending cancel").
+    sql`SELECT
+          COUNT(*) FILTER (WHERE status='active') active,
+          COUNT(*) FILTER (WHERE status='canceled' AND current_period_end > NOW()) pending_cancel
+        FROM user_subscriptions`,
   ]);
 
   const mrrV = num(mrr[0].mrr);
@@ -1462,8 +1468,11 @@ export async function getRevenueHealth() {
   const withFailure = num(recovery[0].with_failure);
   const recovered = num(recovery[0].recovered);
   const re = repeat[0];
+  const activePaid = num(paid[0].active);
+  const pendingCancel = num(paid[0].pending_cancel);
 
   return {
+    paidUsers: { active: activePaid, pendingCancel, total: activePaid + pendingCancel },
     mrr: mrrV,
     arr: Math.round(mrrV * 12 * 100) / 100,
     activeSubs: num(mrr[0].active_subs),

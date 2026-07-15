@@ -17,6 +17,18 @@ export default function RevenueHealth() {
         </div>
       ) : (
         <>
+          <div className="card tile" style={{ marginBottom: 16 }}>
+            <span className="tile-label">Paid users <span className="muted" style={{ fontWeight: 500 }}>(active / total / pending cancel)</span></span>
+            <div className="triple-stat">
+              <div><span className="triple-val" style={{ color: "var(--good-text)" }}>{fmtInt(data.paidUsers.active)}</span><span className="triple-lbl">Active</span></div>
+              <span className="triple-sep">/</span>
+              <div><span className="triple-val">{fmtInt(data.paidUsers.total)}</span><span className="triple-lbl">Total with access</span></div>
+              <span className="triple-sep">/</span>
+              <div><span className="triple-val" style={{ color: "var(--critical)" }}>{fmtInt(data.paidUsers.pendingCancel)}</span><span className="triple-lbl">Pending cancel</span></div>
+            </div>
+            <span className="tile-sub">&ldquo;Total with access&rdquo; = active subscribers plus those who cancelled but are still inside their paid period.</span>
+          </div>
+
           <div className="grid grid-4" style={{ marginBottom: 16 }}>
             <StatTile label="MRR" value={data.mrr} sub={`${fmtInt(data.activeSubs)} active subs · ARR ${fmtMoney(data.arr)}`} format="money" />
             <StatTile label="Monthly churn" value={data.churn.monthlyChurnPct} sub={`${fmtInt(data.churn.ended)} lost / ${fmtInt(data.churn.activeNow)} active · 30d`} format="pct" goodDirection="down" />
