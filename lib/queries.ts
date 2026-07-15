@@ -1414,13 +1414,15 @@ export async function getRetentionCohorts() {
   const byCohort = new Map<string, { week: string; size: number; cells: Record<number, number> }>();
   let maxWeek = 0;
   for (const r of rows) {
-    const week = String(r.cohort_week).slice(0, 10);
+    // Neon returns a date column as a JS Date — normalise to YYYY-MM-DD so
+    // rows sort chronologically (not alphabetically by weekday name).
+    const week = new Date(r.cohort_week as any).toISOString().slice(0, 10);
     const weekNo = num(r.week_no);
     maxWeek = Math.max(maxWeek, weekNo);
     if (!byCohort.has(week)) byCohort.set(week, { week, size: num(r.size), cells: {} });
     byCohort.get(week)!.cells[weekNo] = num(r.pct);
   }
-  // Newest cohort first.
+  // Newest cohort first (ISO date strings sort chronologically).
   const cohorts = [...byCohort.values()].sort((a, b) => (a.week < b.week ? 1 : -1));
   return { cohorts, maxWeek };
 }
