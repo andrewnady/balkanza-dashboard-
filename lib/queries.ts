@@ -1502,8 +1502,13 @@ export async function getRevenueHealth() {
 /* ------------------------------------------------------------------ */
 /* RE-ENGAGEMENT & AI — push reach + AI matchmaker performance          */
 /* ------------------------------------------------------------------ */
+const STALLED_EMAIL_LABELS: Record<string, string> = {
+  stalled_match_one_sided: "One-sided match",
+  stalled_match_dead_match: "Dead match",
+};
+
 export async function getReengagement() {
-  const [reach, platform, ai] = await Promise.all([
+  const [reach, platform, ai, emails] = await Promise.all([
     sql`SELECT (SELECT COUNT(*) FROM users WHERE is_admin=false) total_users,
           (SELECT COUNT(DISTINCT user_id) FROM push_notification_tokens) with_token,
           (SELECT COUNT(DISTINCT pt.user_id) FROM push_notification_tokens pt JOIN users u ON u.id=pt.user_id
@@ -1516,6 +1521,11 @@ export async function getReengagement() {
           ROUND(AVG(compatibility_score)::numeric,1) avg_score,
           (SELECT COUNT(*) FROM ai_match_feedback) feedback
         FROM ai_match_events`,
+    // Triggered re-engagement emails for stalled matches (every email_tracking
+    // row is a stalled-match email — the enum only has the two stalled types).
+    sql`SELECT email_type::text type,
+          COUNT(*) sent, COUNT(opened_at) opened, COUNT(cta_clicked_at) clicked, COUNT(converted_at) converted
+        FROM email_tracking GROUP BY 1`,
   ]);
 
   const r = reach[0];
@@ -1539,5 +1549,28 @@ export async function getReengagement() {
       avgScore: num(a.avg_score),
       feedback: num(a.feedback),
     },
+    emails: buildEmailFunnel(emails),
   };
+}
+
+function buildEmailFunnel(rows: Record<string, unknown>[]) {
+  const rate = (n: number, d: number) => (d ? Math.round((1000 * n) / d) / 10 : 0);
+  const roll = (r: { sent: number; opened: number; clicked: number; converted: number }) => ({
+    ...r,
+    openRate: rate(r.opened, r.sent),
+    clickRate: rate(r.clicked, r.sent),
+    convRate: rate(r.converted, r.sent),
+  });
+  const byType = rows.map((r) => ({
+    type: r.type as string,
+    label: STALLED_EMAIL_LABELS[r.type as string] || (r.type as string),
+    ...roll({ sent: num(r.sent), opened: num(r.opened), clicked: num(r.clicked), converted: num(r.converted) }),
+  }));
+  const total = roll({
+    sent: byType.reduce((a, r) => a + r.sent, 0),
+    opened: byType.reduce((a, r) => a + r.opened, 0),
+    clicked: byType.reduce((a, r) => a + r.clicked, 0),
+    converted: byType.reduce((a, r) => a + r.converted, 0),
+  });
+  return { total, byType };
 }

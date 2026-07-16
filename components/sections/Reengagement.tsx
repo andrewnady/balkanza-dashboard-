@@ -54,6 +54,51 @@ export default function Reengagement() {
               </div>
             </div>
             <div className="card">
+              <p className="card-title">Stalled-match re-engagement emails</p>
+              <p className="card-note">Triggered emails nudging users back to one-sided &amp; dead matches — send → open → click → convert.</p>
+              {data.emails.total.sent === 0 ? (
+                <div className="callout info" style={{ marginTop: 8 }}>
+                  <span className="callout-icon">📭</span>
+                  <div>No stalled-match emails have been sent yet. The system is configured (one-sided &amp; dead-match triggers) but hasn&apos;t fired — this panel fills in automatically once it starts sending.</div>
+                </div>
+              ) : (
+                <div className="tbl-scroll">
+                  <table className="tbl">
+                    <thead>
+                      <tr>
+                        <th>Trigger</th>
+                        <th className="num">Sent</th>
+                        <th className="num">Opened</th>
+                        <th className="num">Clicked</th>
+                        <th className="num">Converted</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.emails.byType.map((t: any) => (
+                        <tr key={t.type}>
+                          <td style={{ fontWeight: 600 }}>{t.label}</td>
+                          <td className="num">{fmtInt(t.sent)}</td>
+                          <td className="num">{fmtInt(t.opened)} <span className="muted">({fmtPct(t.openRate)})</span></td>
+                          <td className="num">{fmtInt(t.clicked)} <span className="muted">({fmtPct(t.clickRate)})</span></td>
+                          <td className="num">{fmtInt(t.converted)} <span className="muted">({fmtPct(t.convRate)})</span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <td style={{ fontWeight: 700, borderTop: "1px solid var(--border)" }}>Total</td>
+                        <td className="num" style={{ fontWeight: 700, borderTop: "1px solid var(--border)" }}>{fmtInt(data.emails.total.sent)}</td>
+                        <td className="num" style={{ borderTop: "1px solid var(--border)" }}>{fmtInt(data.emails.total.opened)} <span className="muted">({fmtPct(data.emails.total.openRate)})</span></td>
+                        <td className="num" style={{ borderTop: "1px solid var(--border)" }}>{fmtInt(data.emails.total.clicked)} <span className="muted">({fmtPct(data.emails.total.clickRate)})</span></td>
+                        <td className="num" style={{ borderTop: "1px solid var(--border)" }}>{fmtInt(data.emails.total.converted)} <span className="muted">({fmtPct(data.emails.total.convRate)})</span></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="card">
               <p className="card-title">AI matchmaker performance</p>
               <p className="card-note">Are AI-suggested intros driving people to actually start chatting?</p>
               <div className="tbl-scroll">
