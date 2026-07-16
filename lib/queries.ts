@@ -40,10 +40,12 @@ export async function getOverview(params: PeriodInput) {
           COALESCE(SUM(amount) FILTER (WHERE created_at >= ${p.prevStart}::timestamptz AND created_at < ${p.prevEndEx}::timestamptz), 0) AS prev
         FROM txns`,
     // Distinct matched pairs (each match is two like rows — dedupe with LEAST/GREATEST).
+    // A match forms when the SECOND person likes back, so attribute it to MAX
+    // (the reciprocating like), not MIN (the first like).
     sql`SELECT
           COUNT(*) FILTER (WHERE mn >= ${p.start}::timestamptz AND mn < ${p.endEx}::timestamptz)         AS cur,
           COUNT(*) FILTER (WHERE mn >= ${p.prevStart}::timestamptz AND mn < ${p.prevEndEx}::timestamptz) AS prev
-        FROM (SELECT MIN(created_at) AS mn FROM likes WHERE is_match = true
+        FROM (SELECT MAX(created_at) AS mn FROM likes WHERE is_match = true
               GROUP BY LEAST(liker_id, liked_id), GREATEST(liker_id, liked_id)) t`,
     // New premium subscriptions = subscriptions whose FIRST successful payment
     // lands in the period (a real paid conversion, not an unpaid subscription row).
@@ -188,7 +190,7 @@ export async function getEngagement(params: PeriodInput) {
     // LEAST/GREATEST). Split by how many of the two people ever messaged
     // (text or rose/gift): 2 = two-way conversation, 1 = one-sided, 0 = dead.
     sql`WITH m AS (
-          SELECT LEAST(liker_id, liked_id) a, GREATEST(liker_id, liked_id) b, MIN(created_at) matched_at
+          SELECT LEAST(liker_id, liked_id) a, GREATEST(liker_id, liked_id) b, MAX(created_at) matched_at
           FROM likes WHERE is_match = true GROUP BY 1, 2
         ),
         pm AS (
@@ -596,10 +598,12 @@ export async function getMatches(params: PeriodInput, typeIn: unknown) {
 
   const rows = await sql`
     WITH m AS (
-      SELECT LEAST(liker_id, liked_id) AS a, GREATEST(liker_id, liked_id) AS b, MIN(created_at) AS matched_at
-      FROM likes
-      WHERE is_match = true AND created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz
+      -- Match forms at the reciprocating (later) like, so use MAX(created_at) as
+      -- the match time, then keep pairs that formed inside the window.
+      SELECT LEAST(liker_id, liked_id) AS a, GREATEST(liker_id, liked_id) AS b, MAX(created_at) AS matched_at
+      FROM likes WHERE is_match = true
       GROUP BY 1, 2
+      HAVING MAX(created_at) >= ${p.start}::timestamptz AND MAX(created_at) < ${p.endEx}::timestamptz
     ),
     msg AS (
       SELECT LEAST(sender_id, receiver_id) AS a, GREATEST(sender_id, receiver_id) AS b,
@@ -1242,7 +1246,7 @@ export async function getViewsBoosts(params: PeriodInput) {
     // boosted like (boost_id set) is involved. This measures boost impact, not
     // total app matches. Each match is two like rows — dedupe by pair.
     sql`SELECT mn::date AS d, COUNT(*) AS matches FROM (
-          SELECT MIN(created_at) AS mn FROM likes WHERE is_match = true AND boost_id IS NOT NULL
+          SELECT MAX(created_at) AS mn FROM likes WHERE is_match = true AND boost_id IS NOT NULL
           GROUP BY LEAST(liker_id, liked_id), GREATEST(liker_id, liked_id)
         ) t
         WHERE mn >= ${p.start}::timestamptz AND mn < ${p.endEx}::timestamptz
