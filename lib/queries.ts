@@ -99,7 +99,7 @@ const fmtIntLocal = (n: number) => n.toLocaleString("en-US");
 export async function getGrowth(params: PeriodInput) {
   const p = resolvePeriod(params, [1, 7, 14, 30, 90], 30);
 
-  const [trend, sources] = await Promise.all([
+  const [trend, sources, matchesDaily] = await Promise.all([
     // Per day: new sign-ups + what % of that day's cohort completed their profile.
     sql`SELECT u.created_at::date AS date, COUNT(*) AS signups,
           ROUND(100.0 * COUNT(*) FILTER (WHERE p.is_complete) / NULLIF(COUNT(*),0), 1) AS pct_complete
@@ -110,11 +110,25 @@ export async function getGrowth(params: PeriodInput) {
         FROM users
         WHERE is_admin = false AND created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz
         GROUP BY 1 ORDER BY signups DESC`,
+    // New matches per day, attributed to when the match formed (reciprocating like = MAX).
+    sql`SELECT mn::date AS d, COUNT(*) AS matches FROM (
+          SELECT MAX(created_at) AS mn FROM likes WHERE is_match = true
+          GROUP BY LEAST(liker_id, liked_id), GREATEST(liker_id, liked_id)) t
+        WHERE mn >= ${p.start}::timestamptz AND mn < ${p.endEx}::timestamptz
+        GROUP BY 1`,
   ]);
+
+  const isoDay = (v: unknown) => new Date(v as any).toISOString().slice(0, 10);
+  const matchMap = new Map(matchesDaily.map((r) => [isoDay(r.d), num(r.matches)]));
 
   return {
     period: meta(p),
-    trend: trend.map((r) => ({ date: String(r.date).slice(0, 10), signups: num(r.signups), pctComplete: num(r.pct_complete) })),
+    trend: trend.map((r) => ({
+      date: String(r.date).slice(0, 10),
+      signups: num(r.signups),
+      pctComplete: num(r.pct_complete),
+      matches: matchMap.get(isoDay(r.date)) || 0,
+    })),
     sources: sources.map((r) => ({ source: r.source as string, signups: num(r.signups) })),
   };
 }
