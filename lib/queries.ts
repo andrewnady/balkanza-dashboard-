@@ -1571,58 +1571,6 @@ export async function getReengagement() {
   };
 }
 
-/* ------------------------------------------------------------------ */
-/* NEW-USER ACTIVATION — monitor the "get new users matched fast" bets  */
-/* ------------------------------------------------------------------ */
-export async function getNewUserActivation() {
-  const [cohorts, freshness] = await Promise.all([
-    sql`WITH c AS (SELECT id, date_trunc('week',created_at)::date wk, created_at FROM users
-                   WHERE is_admin=false AND created_at >= date_trunc('week',NOW()) - INTERVAL '8 weeks'),
-        fm AS (SELECT c.id, c.wk, c.created_at, MIN(l.created_at) first_match
-               FROM c JOIN likes l ON (l.liker_id=c.id OR l.liked_id=c.id) AND l.is_match GROUP BY 1,2,3)
-        SELECT c.wk,
-          COUNT(*) cohort,
-          COUNT(*) FILTER (WHERE fm.first_match IS NOT NULL AND fm.first_match <= c.created_at + INTERVAL '7 days') matched_7d,
-          COUNT(*) FILTER (WHERE EXISTS(SELECT 1 FROM profile_boosts b WHERE b.user_id=c.id AND b.started_at <= c.created_at + INTERVAL '72 hours')) boosted_72h,
-          ROUND(percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(epoch FROM (fm.first_match - c.created_at))/3600)
-                FILTER (WHERE fm.first_match IS NOT NULL AND fm.first_match <= c.created_at + INTERVAL '7 days')::numeric,1) median_hrs,
-          (NOW() >= c.wk + INTERVAL '14 days') mature
-        FROM c LEFT JOIN fm ON fm.id=c.id
-        GROUP BY 1, 6 ORDER BY 1 DESC`,
-    sql`SELECT COUNT(*) likes_7d,
-          ROUND(100.0*COUNT(*) FILTER (WHERE u.last_active_at >= NOW()-INTERVAL '24 hours')/NULLIF(COUNT(*),0),1) to_active_24h,
-          ROUND(100.0*COUNT(*) FILTER (WHERE u.last_active_at >= NOW()-INTERVAL '7 days')/NULLIF(COUNT(*),0),1) to_active_7d
-        FROM likes l JOIN users u ON u.id=l.liked_id WHERE l.created_at >= NOW()-INTERVAL '7 days'`,
-  ]);
-
-  const rows = cohorts.map((r) => {
-    const size = num(r.cohort);
-    const matched = num(r.matched_7d);
-    const boosted = num(r.boosted_72h);
-    return {
-      week: new Date(r.wk as any).toISOString().slice(0, 10),
-      size,
-      matched7d: matched,
-      matchRate: size ? Math.round((1000 * matched) / size) / 10 : 0,
-      medianHrs: num(r.median_hrs),
-      boosted72h: boosted,
-      boostRate: size ? Math.round((1000 * boosted) / size) / 10 : 0,
-      mature: Boolean(r.mature),
-    };
-  });
-  // Oldest -> newest for left-to-right trend charts.
-  rows.reverse();
-  const latestMature = [...rows].reverse().find((r) => r.mature) || null;
-  const f = freshness[0];
-
-  return {
-    cohorts: rows,
-    latestMature,
-    boostCoverage: rows.reduce((a, r) => a + r.boosted72h, 0),
-    freshness: { likes7d: num(f.likes_7d), toActive24h: num(f.to_active_24h), toActive7d: num(f.to_active_7d) },
-  };
-}
-
 function buildEmailFunnel(rows: Record<string, unknown>[]) {
   const rate = (n: number, d: number) => (d ? Math.round((1000 * n) / d) / 10 : 0);
   const roll = (r: { sent: number; opened: number; clicked: number; converted: number }) => ({

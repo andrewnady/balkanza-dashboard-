@@ -24,7 +24,6 @@ import {
   getRetentionCohorts,
   getRevenueHealth,
   getReengagement,
-  getNewUserActivation,
 } from "@/lib/queries";
 
 export const runtime = "nodejs";
@@ -131,9 +130,6 @@ export async function GET(req: NextRequest) {
         break;
       case "reengagement":
         data = await getReengagement();
-        break;
-      case "new-user-activation":
-        data = await getNewUserActivation();
         break;
       default:
         return NextResponse.json({ error: `Unknown section: ${section}` }, { status: 400 });

@@ -10,7 +10,6 @@ import Discovery from "./sections/Discovery";
 import Diagnostics from "./sections/Diagnostics";
 import Marketplace from "./sections/Marketplace";
 import RetentionCohorts from "./sections/RetentionCohorts";
-import NewUserActivation from "./sections/NewUserActivation";
 import Reengagement from "./sections/Reengagement";
 import Liquidity from "./sections/Liquidity";
 import Monetization from "./sections/Monetization";
@@ -22,7 +21,6 @@ const NAV = [
   { id: "growth", label: "Growth" },
   { id: "funnel", label: "Funnel" },
   { id: "retention", label: "Retention" },
-  { id: "new-user-activation", label: "New-user activation" },
   { id: "engagement", label: "Engagement" },
   { id: "conversations", label: "Conversations" },
   { id: "discovery", label: "Discovery" },
@@ -95,7 +93,6 @@ export default function Dashboard() {
         <Growth />
         <Funnel />
         <RetentionCohorts />
-        <NewUserActivation />
         <Engagement />
         <Conversations />
         <Discovery />
