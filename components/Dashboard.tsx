@@ -6,6 +6,7 @@ import Growth from "./sections/Growth";
 import Funnel from "./sections/Funnel";
 import Engagement from "./sections/Engagement";
 import Conversations from "./sections/Conversations";
+import Kafana from "./sections/Kafana";
 import Discovery from "./sections/Discovery";
 import Diagnostics from "./sections/Diagnostics";
 import Marketplace from "./sections/Marketplace";
@@ -23,6 +24,7 @@ const NAV = [
   { id: "retention", label: "Retention" },
   { id: "engagement", label: "Engagement" },
   { id: "conversations", label: "Conversations" },
+  { id: "kafana", label: "Kafana" },
   { id: "discovery", label: "Discovery" },
   { id: "marketplace", label: "Marketplace" },
   { id: "diagnostics", label: "Diagnostics" },
@@ -95,6 +97,7 @@ export default function Dashboard() {
         <RetentionCohorts />
         <Engagement />
         <Conversations />
+        <Kafana />
         <Discovery />
         <Marketplace />
         <Diagnostics />

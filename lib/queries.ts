@@ -1592,3 +1592,74 @@ function buildEmailFunnel(rows: Record<string, unknown>[]) {
   });
   return { total, byType };
 }
+
+/* ------------------------------------------------------------------ */
+/* KAFANA — community feed (posts, comments, reactions, moderation)    */
+/* ------------------------------------------------------------------ */
+export async function getKafana() {
+  const [totals, reactions, daily, topPosters] = await Promise.all([
+    sql`SELECT
+          (SELECT COUNT(*) FROM kafana_posts    WHERE deleted_at IS NULL)     posts_live,
+          (SELECT COUNT(*) FROM kafana_posts    WHERE deleted_at IS NOT NULL) posts_deleted,
+          (SELECT COUNT(*) FROM kafana_comments WHERE deleted_at IS NULL)     comments_live,
+          (SELECT COUNT(*) FROM kafana_comments WHERE deleted_at IS NOT NULL) comments_deleted,
+          (SELECT COUNT(*) FROM kafana_reactions)                             reactions,
+          (SELECT COUNT(DISTINCT author_id) FROM kafana_posts    WHERE deleted_at IS NULL) posters,
+          (SELECT COUNT(DISTINCT author_id) FROM kafana_comments WHERE deleted_at IS NULL) commenters,
+          (SELECT COUNT(DISTINCT user_id)   FROM kafana_reactions)            reactors,
+          (SELECT COUNT(*) FROM kafana_post_reports)                          post_reports,
+          (SELECT COUNT(*) FROM kafana_comment_reports)                       comment_reports`,
+    sql`SELECT reaction_type::text type, COUNT(*) n FROM kafana_reactions GROUP BY 1 ORDER BY 2 DESC`,
+    // Daily posts + comments over the last 14 days.
+    sql`SELECT d, SUM(posts) posts, SUM(comments) comments FROM (
+          SELECT created_at::date d, COUNT(*) posts, 0 comments FROM kafana_posts    WHERE deleted_at IS NULL AND created_at >= NOW() - INTERVAL '14 days' GROUP BY 1
+          UNION ALL
+          SELECT created_at::date d, 0 posts, COUNT(*) comments FROM kafana_comments WHERE deleted_at IS NULL AND created_at >= NOW() - INTERVAL '14 days' GROUP BY 1
+        ) t GROUP BY d ORDER BY d`,
+    sql`SELECT p.author_id id,
+          NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), '') name, u.email,
+          COUNT(*) posts,
+          (SELECT COUNT(*) FROM kafana_reactions r WHERE r.target_type = 'post'
+             AND r.target_id IN (SELECT id FROM kafana_posts kp WHERE kp.author_id = p.author_id AND kp.deleted_at IS NULL)) reactions_received,
+          (SELECT COUNT(*) FROM kafana_comments c
+             WHERE c.post_id IN (SELECT id FROM kafana_posts kp WHERE kp.author_id = p.author_id AND kp.deleted_at IS NULL)) comments_received
+        FROM kafana_posts p JOIN users u ON u.id = p.author_id
+        WHERE p.deleted_at IS NULL
+        GROUP BY p.author_id, u.first_name, u.last_name, u.email
+        ORDER BY posts DESC, reactions_received DESC LIMIT 20`,
+  ]);
+
+  const t = totals[0];
+  const postsLive = num(t.posts_live);
+  const commentsLive = num(t.comments_live);
+  const reactionsTotal = num(t.reactions);
+
+  return {
+    totals: {
+      posts: postsLive,
+      postsDeleted: num(t.posts_deleted),
+      comments: commentsLive,
+      commentsDeleted: num(t.comments_deleted),
+      reactions: reactionsTotal,
+      posters: num(t.posters),
+      commenters: num(t.commenters),
+      reactors: num(t.reactors),
+      postReports: num(t.post_reports),
+      commentReports: num(t.comment_reports),
+    },
+    engagement: {
+      reactionsPerPost: postsLive ? Math.round((10 * reactionsTotal) / postsLive) / 10 : 0,
+      commentsPerPost: postsLive ? Math.round((10 * commentsLive) / postsLive) / 10 : 0,
+    },
+    reactionBreakdown: reactions.map((r) => ({ type: r.type as string, n: num(r.n) })),
+    daily: daily.map((r) => ({ date: new Date(r.d as any).toISOString().slice(0, 10), posts: num(r.posts), comments: num(r.comments) })),
+    topPosters: topPosters.map((r) => ({
+      id: r.id as string,
+      name: r.name as string | null,
+      email: r.email as string | null,
+      posts: num(r.posts),
+      reactionsReceived: num(r.reactions_received),
+      commentsReceived: num(r.comments_received),
+    })),
+  };
+}
