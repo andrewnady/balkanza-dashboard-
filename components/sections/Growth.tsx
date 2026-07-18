@@ -28,8 +28,8 @@ export default function Growth() {
       ) : (
         <div className="grid grid-3">
           <div className="card col-span-2">
-            <p className="card-title">Sign-ups, new matches &amp; profile completion per day</p>
-            <p className="card-note">New registrations (area) &amp; new matches (line) on the left axis; % of that day&apos;s cohort completing their profile on the right axis, {periodLabel(period)}.</p>
+            <p className="card-title">Sign-ups, active users, new matches &amp; profile completion per day</p>
+            <p className="card-note">Sign-ups (area), daily active users &amp; new matches (lines) on the left axis; % of that day&apos;s cohort completing their profile on the right axis, {periodLabel(period)}.</p>
             {loading || !data ? (
               <CardSkeleton height={240} />
             ) : (
@@ -40,7 +40,10 @@ export default function Growth() {
                   areaKey="signups"
                   areaName="Sign-ups"
                   areaColor="var(--series-1)"
-                  leftLine={{ key: "matches", name: "New matches", color: "#e23744" }}
+                  leftLines={[
+                    { key: "dau", name: "Active users", color: "#7c4dff" },
+                    { key: "matches", name: "New matches", color: "#e23744" },
+                  ]}
                   lineKey="pctComplete"
                   lineName="Profile completion"
                   lineColor="var(--series-4)"
@@ -49,6 +52,7 @@ export default function Growth() {
                 />
                 <div className="chart-legend">
                   <span className="legend-item"><span className="legend-dot" style={{ background: "var(--series-1)" }} />Sign-ups</span>
+                  <span className="legend-item"><span className="legend-dot" style={{ background: "#7c4dff" }} />Active users (took an action)</span>
                   <span className="legend-item"><span className="legend-dot" style={{ background: "#e23744" }} />New matches</span>
                   <span className="legend-item"><span className="legend-dot" style={{ background: "var(--series-4)" }} />Profile completion %</span>
                 </div>

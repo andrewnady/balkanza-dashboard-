@@ -99,7 +99,7 @@ const fmtIntLocal = (n: number) => n.toLocaleString("en-US");
 export async function getGrowth(params: PeriodInput) {
   const p = resolvePeriod(params, [1, 7, 14, 30, 90], 30);
 
-  const [trend, sources, matchesDaily] = await Promise.all([
+  const [trend, sources, matchesDaily, dauDaily] = await Promise.all([
     // Per day: new sign-ups + what % of that day's cohort completed their profile.
     sql`SELECT u.created_at::date AS date, COUNT(*) AS signups,
           ROUND(100.0 * COUNT(*) FILTER (WHERE p.is_complete) / NULLIF(COUNT(*),0), 1) AS pct_complete
@@ -116,10 +116,18 @@ export async function getGrowth(params: PeriodInput) {
           GROUP BY LEAST(liker_id, liked_id), GREATEST(liker_id, liked_id)) t
         WHERE mn >= ${p.start}::timestamptz AND mn < ${p.endEx}::timestamptz
         GROUP BY 1`,
+    // Daily active users = distinct users who took an action (like / dislike /
+    // message) that day. Page-view based DAU is far too slow on a 12M-row table.
+    sql`SELECT d, COUNT(DISTINCT uid) AS dau FROM (
+          SELECT created_at::date d, liker_id uid    FROM likes    WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz
+          UNION ALL SELECT created_at::date, disliker_id FROM dislikes WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz
+          UNION ALL SELECT created_at::date, sender_id   FROM messages WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz
+        ) t GROUP BY d`,
   ]);
 
   const isoDay = (v: unknown) => new Date(v as any).toISOString().slice(0, 10);
   const matchMap = new Map(matchesDaily.map((r) => [isoDay(r.d), num(r.matches)]));
+  const dauMap = new Map(dauDaily.map((r) => [isoDay(r.d), num(r.dau)]));
 
   return {
     period: meta(p),
@@ -128,6 +136,7 @@ export async function getGrowth(params: PeriodInput) {
       signups: num(r.signups),
       pctComplete: num(r.pct_complete),
       matches: matchMap.get(isoDay(r.date)) || 0,
+      dau: dauMap.get(isoDay(r.date)) || 0,
     })),
     sources: sources.map((r) => ({ source: r.source as string, signups: num(r.signups) })),
   };

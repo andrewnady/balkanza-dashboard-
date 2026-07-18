@@ -93,7 +93,7 @@ export function DualAxisTrend({
   lineKey,
   lineName,
   lineColor = "var(--series-2)",
-  leftLine,
+  leftLines,
   height = 240,
   leftFmt,
   rightFmt,
@@ -107,7 +107,7 @@ export function DualAxisTrend({
   lineKey: string;
   lineName: string;
   lineColor?: string;
-  leftLine?: { key: string; name: string; color: string };
+  leftLines?: { key: string; name: string; color: string }[];
   height?: number;
   leftFmt?: (v: number) => string;
   rightFmt?: (v: number) => string;
@@ -131,9 +131,9 @@ export function DualAxisTrend({
         <YAxis yAxisId="right" orientation="right" domain={rightDomain} tick={{ fill: AXIS, fontSize: 11 }} tickLine={false} axisLine={false} width={44} tickFormatter={rightFmt} />
         <Tooltip content={<TooltipBox valueFmt={fmt} />} />
         <Area yAxisId="left" type="monotone" dataKey={areaKey} name={areaName} stroke={areaColor} strokeWidth={2} fill={`url(#${gid})`} dot={false} activeDot={{ r: 4 }} />
-        {leftLine && (
-          <Line yAxisId="left" type="monotone" dataKey={leftLine.key} name={leftLine.name} stroke={leftLine.color} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-        )}
+        {(leftLines || []).map((l) => (
+          <Line key={l.key} yAxisId="left" type="monotone" dataKey={l.key} name={l.name} stroke={l.color} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+        ))}
         <Line yAxisId="right" type="monotone" dataKey={lineKey} name={lineName} stroke={lineColor} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
       </ComposedChart>
     </ResponsiveContainer>
