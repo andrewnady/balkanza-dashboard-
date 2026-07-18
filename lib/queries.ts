@@ -26,10 +26,18 @@ export async function getOverview(params: PeriodInput) {
           COUNT(*) FILTER (WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz)         AS cur,
           COUNT(*) FILTER (WHERE created_at >= ${p.prevStart}::timestamptz AND created_at < ${p.prevEndEx}::timestamptz) AS prev
         FROM users WHERE is_admin = false`,
-    sql`SELECT
-          COUNT(*) FILTER (WHERE last_active_at >= ${p.start}::timestamptz AND last_active_at < ${p.endEx}::timestamptz)         AS cur,
-          COUNT(*) FILTER (WHERE last_active_at >= ${p.prevStart}::timestamptz AND last_active_at < ${p.prevEndEx}::timestamptz) AS prev
-        FROM users WHERE is_admin = false AND is_disabled = false`,
+    // Active users = distinct people who took an action (liked / disliked /
+    // messaged) in the window. Event-based so it's identical to the daily chart
+    // and drill-down, and reconstructable per-day (last_active_at can't be).
+    sql`WITH act AS (
+          SELECT liker_id uid, created_at FROM likes
+          UNION ALL SELECT disliker_id, created_at FROM dislikes
+          UNION ALL SELECT sender_id, created_at FROM messages
+        )
+        SELECT
+          COUNT(DISTINCT act.uid) FILTER (WHERE act.created_at >= ${p.start}::timestamptz AND act.created_at < ${p.endEx}::timestamptz)         AS cur,
+          COUNT(DISTINCT act.uid) FILTER (WHERE act.created_at >= ${p.prevStart}::timestamptz AND act.created_at < ${p.prevEndEx}::timestamptz) AS prev
+        FROM act JOIN users u ON u.id = act.uid AND u.is_admin = false`,
     sql`WITH txns AS (
           SELECT created_at, amount FROM subscription_payments WHERE status = 'succeeded'
           UNION ALL
@@ -122,7 +130,7 @@ export async function getGrowth(params: PeriodInput) {
           SELECT created_at::date d, liker_id uid    FROM likes    WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz
           UNION ALL SELECT created_at::date, disliker_id FROM dislikes WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz
           UNION ALL SELECT created_at::date, sender_id   FROM messages WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz
-        ) t GROUP BY d`,
+        ) t JOIN users u ON u.id = t.uid AND u.is_admin = false GROUP BY d`,
   ]);
 
   const isoDay = (v: unknown) => new Date(v as any).toISOString().slice(0, 10);
@@ -292,8 +300,10 @@ export async function getUsers(params: PeriodInput, typeIn: unknown) {
       AND (
         (${type} = 'online'
           AND u.is_disabled = false AND u.last_active_at >= NOW() - INTERVAL '5 minutes')
-        OR (${type} = 'active'
-          AND u.is_disabled = false AND u.last_active_at >= ${p.start}::timestamptz AND u.last_active_at < ${p.endEx}::timestamptz)
+        OR (${type} = 'active' AND (
+             EXISTS (SELECT 1 FROM likes l    WHERE l.liker_id    = u.id AND l.created_at >= ${p.start}::timestamptz AND l.created_at < ${p.endEx}::timestamptz)
+          OR EXISTS (SELECT 1 FROM dislikes d WHERE d.disliker_id = u.id AND d.created_at >= ${p.start}::timestamptz AND d.created_at < ${p.endEx}::timestamptz)
+          OR EXISTS (SELECT 1 FROM messages m WHERE m.sender_id   = u.id AND m.created_at >= ${p.start}::timestamptz AND m.created_at < ${p.endEx}::timestamptz)))
         OR (${type} NOT IN ('active', 'online')
           AND u.created_at >= ${p.start}::timestamptz AND u.created_at < ${p.endEx}::timestamptz
           AND (${type} <> 'completed' OR EXISTS (SELECT 1 FROM profiles pr WHERE pr.user_id = u.id AND pr.is_complete))

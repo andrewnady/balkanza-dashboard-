@@ -52,7 +52,7 @@ export default function Growth() {
                 />
                 <div className="chart-legend">
                   <span className="legend-item"><span className="legend-dot" style={{ background: "var(--series-1)" }} />Sign-ups</span>
-                  <span className="legend-item"><span className="legend-dot" style={{ background: "#7c4dff" }} />Active users (took an action)</span>
+                  <span className="legend-item"><span className="legend-dot" style={{ background: "#7c4dff" }} />Active users</span>
                   <span className="legend-item"><span className="legend-dot" style={{ background: "#e23744" }} />New matches</span>
                   <span className="legend-item"><span className="legend-dot" style={{ background: "var(--series-4)" }} />Profile completion %</span>
                 </div>
