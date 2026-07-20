@@ -20,8 +20,18 @@ import {
 const AXIS = "var(--text-muted)";
 const GRID = "var(--grid)";
 
-function TooltipBox({ active, payload, label, valueFmt }: any) {
+function TooltipBox({ active, payload, label, valueFmt, sortInfo }: any) {
   if (!active || !payload || !payload.length) return null;
+  // Order rows to match the lines' on-screen height (top-most series first),
+  // normalising each value against its own Y axis so left/right axes compare.
+  let items = payload;
+  if (sortInfo) {
+    const pos = (e: any) => {
+      const max = sortInfo.rightKeys?.includes(e.dataKey) ? sortInfo.rightMax : sortInfo.leftMax;
+      return max ? Number(e.value) / max : 0;
+    };
+    items = [...payload].sort((a, b) => pos(b) - pos(a));
+  }
   return (
     <div
       style={{
@@ -34,7 +44,7 @@ function TooltipBox({ active, payload, label, valueFmt }: any) {
       }}
     >
       {label !== undefined && <div style={{ color: "var(--text-muted)", marginBottom: 4 }}>{label}</div>}
-      {payload.map((p: any, i: number) => (
+      {items.map((p: any, i: number) => (
         <div key={i} style={{ display: "flex", alignItems: "center", gap: 7, color: "var(--text-primary)" }}>
           <span style={{ width: 9, height: 9, borderRadius: 3, background: p.color || p.fill }} />
           <span style={{ color: "var(--text-secondary)" }}>{p.name}:</span>
@@ -116,6 +126,10 @@ export function DualAxisTrend({
   const gid = `g-${areaKey}`;
   const fmt = (value: number, entry: any) =>
     entry?.dataKey === lineKey ? (rightFmt ? rightFmt(value) : String(value)) : leftFmt ? leftFmt(value) : String(value);
+  // Axis maxes so the tooltip can order rows by on-screen height.
+  const leftKeys = [areaKey, ...(leftLines || []).map((l) => l.key)];
+  const leftMax = Math.max(1, ...data.flatMap((d) => leftKeys.map((k) => Number(d[k])).filter((v) => !Number.isNaN(v))));
+  const sortInfo = { rightKeys: [lineKey], rightMax: rightDomain[1] || 100, leftMax };
   return (
     <ResponsiveContainer width="100%" height={height}>
       <ComposedChart data={data} margin={{ top: 6, right: 4, left: -12, bottom: 0 }}>
@@ -129,7 +143,7 @@ export function DualAxisTrend({
         <XAxis dataKey={xKey} tick={{ fill: AXIS, fontSize: 11 }} tickLine={false} axisLine={{ stroke: GRID }} minTickGap={24} />
         <YAxis yAxisId="left" tick={{ fill: AXIS, fontSize: 11 }} tickLine={false} axisLine={false} width={44} tickFormatter={leftFmt} />
         <YAxis yAxisId="right" orientation="right" domain={rightDomain} tick={{ fill: AXIS, fontSize: 11 }} tickLine={false} axisLine={false} width={44} tickFormatter={rightFmt} />
-        <Tooltip content={<TooltipBox valueFmt={fmt} />} />
+        <Tooltip content={<TooltipBox valueFmt={fmt} sortInfo={sortInfo} />} />
         <Area yAxisId="left" type="monotone" dataKey={areaKey} name={areaName} stroke={areaColor} strokeWidth={2} fill={`url(#${gid})`} dot={false} activeDot={{ r: 4 }} />
         {(leftLines || []).map((l) => (
           <Line key={l.key} yAxisId="left" type="monotone" dataKey={l.key} name={l.name} stroke={l.color} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
