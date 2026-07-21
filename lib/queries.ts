@@ -21,7 +21,7 @@ const meta = (p: Period) => ({ mode: p.mode, days: p.days, label: p.label, prevL
 export async function getOverview(params: PeriodInput) {
   const p = resolvePeriod(params, [1, 7, 30, 90], 30);
 
-  const [signups, active, revenue, matches, subs, conversion, online] = await Promise.all([
+  const [signups, active, revenue, matches, subs, posts, online] = await Promise.all([
     sql`SELECT
           COUNT(*) FILTER (WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz)         AS cur,
           COUNT(*) FILTER (WHERE created_at >= ${p.prevStart}::timestamptz AND created_at < ${p.prevEndEx}::timestamptz) AS prev
@@ -65,25 +65,19 @@ export async function getOverview(params: PeriodInput) {
           COUNT(*) FILTER (WHERE fp >= ${p.start}::timestamptz AND fp < ${p.endEx}::timestamptz)         AS cur,
           COUNT(*) FILTER (WHERE fp >= ${p.prevStart}::timestamptz AND fp < ${p.prevEndEx}::timestamptz) AS prev
         FROM first_paid`,
-    // Free→paid for the period's signup cohort: of users who signed up in the
-    // window, how many are paying (have an active subscription).
+    // New Kafana posts in the window (period-over-period).
     sql`SELECT
-          COUNT(*) FILTER (WHERE u.created_at >= ${p.start}::timestamptz AND u.created_at < ${p.endEx}::timestamptz)                              AS signups_cur,
-          COUNT(*) FILTER (WHERE u.created_at >= ${p.start}::timestamptz AND u.created_at < ${p.endEx}::timestamptz AND s.user_id IS NOT NULL)     AS paid_cur,
-          COUNT(*) FILTER (WHERE u.created_at >= ${p.prevStart}::timestamptz AND u.created_at < ${p.prevEndEx}::timestamptz)                       AS signups_prev,
-          COUNT(*) FILTER (WHERE u.created_at >= ${p.prevStart}::timestamptz AND u.created_at < ${p.prevEndEx}::timestamptz AND s.user_id IS NOT NULL) AS paid_prev
-        FROM users u
-        LEFT JOIN (SELECT DISTINCT user_id FROM user_subscriptions WHERE status = 'active') s ON s.user_id = u.id
-        WHERE u.is_admin = false`,
+          COUNT(*) FILTER (WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz)         AS cur,
+          COUNT(*) FILTER (WHERE created_at >= ${p.prevStart}::timestamptz AND created_at < ${p.prevEndEx}::timestamptz) AS prev,
+          COUNT(DISTINCT author_id) FILTER (WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz) AS authors_cur
+        FROM kafana_posts`,
     // Live "online now" — active in the last 5 minutes. Not window-scoped.
     sql`SELECT COUNT(*) AS n FROM users
         WHERE is_admin = false AND is_disabled = false AND last_active_at >= NOW() - INTERVAL '5 minutes'`,
   ]);
 
   const pv = (v: number) => (p.hasPrev ? v : null);
-  const cv = conversion[0];
-  const convCur = num(cv.signups_cur) ? (100 * num(cv.paid_cur)) / num(cv.signups_cur) : 0;
-  const convPrev = num(cv.signups_prev) ? (100 * num(cv.paid_prev)) / num(cv.signups_prev) : 0;
+  const po = posts[0];
 
   return {
     period: meta(p),
@@ -94,12 +88,11 @@ export async function getOverview(params: PeriodInput) {
       { key: "matches", label: "New matches", value: num(matches[0].cur), prev: pv(num(matches[0].prev)), format: "int" },
       { key: "revenue", label: "Revenue (all sources)", value: num(revenue[0].cur), prev: pv(num(revenue[0].prev)), format: "money" },
       { key: "subs", label: "New premium subs", value: num(subs[0].cur), prev: pv(num(subs[0].prev)), sub: "first paid subscription", format: "int" },
-      { key: "conversion", label: "Free → paid", value: convCur, prev: pv(convPrev), sub: `${num(cv.paid_cur)} of ${fmtIntLocal(num(cv.signups_cur))} signups`, format: "pct" },
+      { key: "posts", label: "New posts", value: num(po.cur), prev: pv(num(po.prev)), sub: `${num(po.authors_cur)} posters · Kafana`, format: "int" },
     ],
   };
 }
 
-const fmtIntLocal = (n: number) => n.toLocaleString("en-US");
 
 /* ------------------------------------------------------------------ */
 /* GROWTH — daily sign-up trend + source mix                          */
