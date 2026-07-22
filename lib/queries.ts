@@ -1609,7 +1609,7 @@ function buildEmailFunnel(rows: Record<string, unknown>[]) {
 /* KAFANA — community feed (posts, comments, reactions, moderation)    */
 /* ------------------------------------------------------------------ */
 export async function getKafana() {
-  const [totals, reactions, daily, topPosters] = await Promise.all([
+  const [totals, reactions, daily] = await Promise.all([
     sql`SELECT
           (SELECT COUNT(*) FROM kafana_posts    WHERE deleted_at IS NULL)     posts_live,
           (SELECT COUNT(*) FROM kafana_posts    WHERE deleted_at IS NOT NULL) posts_deleted,
@@ -1628,17 +1628,6 @@ export async function getKafana() {
           UNION ALL
           SELECT created_at::date d, 0 posts, COUNT(*) comments FROM kafana_comments WHERE deleted_at IS NULL AND created_at >= NOW() - INTERVAL '14 days' GROUP BY 1
         ) t GROUP BY d ORDER BY d`,
-    sql`SELECT p.author_id id,
-          NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), '') name, u.email,
-          COUNT(*) posts,
-          (SELECT COUNT(*) FROM kafana_reactions r WHERE r.target_type = 'post'
-             AND r.target_id IN (SELECT id FROM kafana_posts kp WHERE kp.author_id = p.author_id AND kp.deleted_at IS NULL)) reactions_received,
-          (SELECT COUNT(*) FROM kafana_comments c
-             WHERE c.post_id IN (SELECT id FROM kafana_posts kp WHERE kp.author_id = p.author_id AND kp.deleted_at IS NULL)) comments_received
-        FROM kafana_posts p JOIN users u ON u.id = p.author_id
-        WHERE p.deleted_at IS NULL
-        GROUP BY p.author_id, u.first_name, u.last_name, u.email
-        ORDER BY posts DESC, reactions_received DESC LIMIT 20`,
   ]);
 
   const t = totals[0];
@@ -1665,13 +1654,5 @@ export async function getKafana() {
     },
     reactionBreakdown: reactions.map((r) => ({ type: r.type as string, n: num(r.n) })),
     daily: daily.map((r) => ({ date: new Date(r.d as any).toISOString().slice(0, 10), posts: num(r.posts), comments: num(r.comments) })),
-    topPosters: topPosters.map((r) => ({
-      id: r.id as string,
-      name: r.name as string | null,
-      email: r.email as string | null,
-      posts: num(r.posts),
-      reactionsReceived: num(r.reactions_received),
-      commentsReceived: num(r.comments_received),
-    })),
   };
 }

@@ -3,9 +3,6 @@
 import { useMetrics, SectionHead, CardSkeleton, ErrorNote, StatTile, fmtInt } from "../ui/primitives";
 import { GroupedBars } from "../ui/charts";
 
-const PROFILE_URL = process.env.NEXT_PUBLIC_PROFILE_URL_TEMPLATE || "https://balkanza.com/profile/{id}";
-const profileUrl = (id: string) => PROFILE_URL.replace("{id}", encodeURIComponent(id));
-
 const REACTION_EMOJI: Record<string, string> = { like: "👍", love: "❤️", laugh: "😂", wow: "😮", sad: "😢", angry: "😠" };
 
 function weekLabel(iso: string): string {
@@ -80,41 +77,6 @@ export default function Kafana() {
             </div>
           </div>
 
-          <div className="card" style={{ marginTop: 16 }}>
-            <p className="card-title">Top contributors</p>
-            <p className="card-note">Most active posters and the engagement they attract.</p>
-            {data.topPosters.length === 0 ? (
-              <p className="muted" style={{ fontSize: 13 }}>No posts yet.</p>
-            ) : (
-              <div className="tbl-scroll">
-                <table className="tbl">
-                  <thead>
-                    <tr>
-                      <th>User</th>
-                      <th className="num">Posts</th>
-                      <th className="num">Reactions received</th>
-                      <th className="num">Comments received</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.topPosters.map((u: any) => (
-                      <tr key={u.id}>
-                        <td>
-                          <a href={profileUrl(u.id)} target="_blank" rel="noreferrer" className="match-user">
-                            <strong>{u.name || u.email || u.id}</strong> ↗
-                            {u.name && u.email ? <span className="muted"> · {u.email}</span> : null}
-                          </a>
-                        </td>
-                        <td className="num">{fmtInt(u.posts)}</td>
-                        <td className="num">{fmtInt(u.reactionsReceived)}</td>
-                        <td className="num">{fmtInt(u.commentsReceived)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
         </>
       )}
     </section>
