@@ -16,6 +16,13 @@ const TITLES: Record<string, string> = {
 
 const STATUS_BADGE: Record<string, string> = { "two-way": "good", "one-sided": "warn", dead: "crit" };
 
+const STATUS_FILTERS: [string, string][] = [
+  ["all", "All"],
+  ["twoway", "Two-way"],
+  ["oneside", "One-sided"],
+  ["dead", "Dead"],
+];
+
 function fmtWhen(iso: string | null): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
@@ -39,6 +46,13 @@ function MatchesContent() {
     if (v) params[k] = v;
   });
   const { data, error, loading } = useMetrics<any>("matches", params);
+
+  // Preserve the current window params (days/asof/etc.) when switching status.
+  const windowQs = (["days", "range", "from", "to", "asof"] as const)
+    .map((k) => (sp.get(k) ? `${k}=${encodeURIComponent(sp.get(k) as string)}` : ""))
+    .filter(Boolean)
+    .join("&");
+  const hrefFor = (t: string) => `/matches?type=${t}${windowQs ? `&${windowQs}` : ""}`;
 
   return (
     <>
@@ -70,6 +84,16 @@ function MatchesContent() {
                   "Loading…"
                 )}
               </p>
+            </div>
+            <div className="filters">
+              <span className="filter-label">Status</span>
+              <div className="segmented">
+                {STATUS_FILTERS.map(([t, label]) => (
+                  <button key={t} className={type === t ? "active" : ""} onClick={() => { window.location.href = hrefFor(t); }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
