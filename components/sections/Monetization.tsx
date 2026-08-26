@@ -65,6 +65,16 @@ export default function Monetization() {
         </div>
       ) : (
         <>
+          <p className="card-note" style={{ margin: "0 0 8px", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em", fontSize: 12 }}>
+            Product adoption · distinct users · all time
+          </p>
+          <div className="grid grid-4" style={{ marginBottom: 20 }}>
+            <StatTile label="Premium subscribers" value={data.adoption.premium} sub={`${fmtInt(data.adoption.premiumActive)} currently active`} format="int" />
+            <StatTile label="Used Roses" value={data.adoption.roses} sub={`${fmtInt(data.adoption.rosesPaid)} bought roses`} format="int" />
+            <StatTile label="Used Super Likes" value={data.adoption.superLikes} sub="incl. free super likes" format="int" />
+            <StatTile label="Used Boosts" value={data.adoption.boosts} sub="incl. auto-boost" format="int" />
+          </div>
+
           {data.payments.total > 0 && data.payments.failRate >= 50 && (
             <div className="callout crit" style={{ marginBottom: 16 }}>
               <span className="callout-icon">🚨</span>

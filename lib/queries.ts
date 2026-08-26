@@ -740,7 +740,7 @@ export async function getMonetization(params: PeriodInput) {
   // Unified revenue: subscription payments (first-per-subscription = new, later = renewal)
   // + one-time purchases split by service type. The txns CTE is repeated inline in the
   // two queries below so each can stay a single parameterised tagged template.
-  const [byType, trend, plans, offers, payments] = await Promise.all([
+  const [byType, trend, plans, offers, payments, adoption] = await Promise.all([
     sql`WITH txns AS (
           SELECT sp.created_at, CASE WHEN sp.rn = 1 THEN 'Subscriptions' ELSE 'Renewals' END AS type, sp.amount
           FROM (SELECT created_at, amount, ROW_NUMBER() OVER (PARTITION BY subscription_id ORDER BY created_at) AS rn
@@ -782,9 +782,19 @@ export async function getMonetization(params: PeriodInput) {
     sql`SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE status = 'succeeded') AS succeeded,
           COUNT(*) FILTER (WHERE status <> 'succeeded') AS failed
         FROM subscription_payments WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz`,
+    // All-time product adoption: distinct users who used / subscribed to each product.
+    sql`SELECT
+          (SELECT COUNT(DISTINCT us.user_id) FROM user_subscriptions us
+             JOIN subscription_payments sp ON sp.subscription_id = us.id AND sp.status = 'succeeded') premium,
+          (SELECT COUNT(DISTINCT us.user_id) FROM user_subscriptions us WHERE us.status = 'active') premium_active,
+          (SELECT COUNT(DISTINCT sender_id) FROM messages WHERE message_type = 'one_time_service' AND one_time_service_id = 1) roses,
+          (SELECT COUNT(DISTINCT pu.user_id) FROM purchases pu WHERE pu.payment_status = 'paid' AND pu.service_id = 1) roses_paid,
+          (SELECT COUNT(DISTINCT liker_id) FROM likes WHERE is_super_like = true) superlikes,
+          (SELECT COUNT(DISTINCT user_id) FROM profile_boosts) boosts`,
   ]);
 
   const pay = payments[0];
+  const ad = adoption[0];
   const revenueByType = byType.map((r) => ({ type: r.type as string, transactions: num(r.transactions), revenue: num(r.revenue) }));
   const totalRevenue = revenueByType.reduce((s, r) => s + r.revenue, 0);
   return {
@@ -795,6 +805,14 @@ export async function getMonetization(params: PeriodInput) {
     plans: plans.map((r) => ({ name: r.display_name as string, price: num(r.price), duration: (r.duration as string) || "", active: num(r.active_subs) })),
     offers: offers.map((r) => ({ name: r.name as string, impressions: num(r.impressions), claimed: num(r.claimed), claimRate: num(r.claim_rate) })),
     payments: { total: num(pay.total), succeeded: num(pay.succeeded), failed: num(pay.failed), failRate: num(pay.total) ? Math.round((1000 * num(pay.failed)) / num(pay.total)) / 10 : 0 },
+    adoption: {
+      premium: num(ad.premium),
+      premiumActive: num(ad.premium_active),
+      roses: num(ad.roses),
+      rosesPaid: num(ad.roses_paid),
+      superLikes: num(ad.superlikes),
+      boosts: num(ad.boosts),
+    },
   };
 }
 
