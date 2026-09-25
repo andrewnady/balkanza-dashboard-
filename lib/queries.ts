@@ -652,10 +652,6 @@ export async function getMatches(params: PeriodInput, typeIn: unknown) {
     JOIN users ub   ON ub.id = m.b
     LEFT JOIN profiles pra ON pra.user_id = m.a
     LEFT JOIN profiles prb ON prb.user_id = m.b
-    FROM m
-    LEFT JOIN msg   ON msg.a = m.a AND msg.b = m.b
-    JOIN users ua   ON ua.id = m.a
-    JOIN users ub   ON ub.id = m.b
     WHERE (${type} = 'all'
         OR (${type} = 'twoway'  AND COALESCE(msg.senders,0) = 2)
         OR (${type} = 'oneside' AND COALESCE(msg.senders,0) = 1)
