@@ -471,19 +471,26 @@ export async function getBuyers(params: PeriodInput, typeIn: unknown) {
 
   const rows = await sql`
     WITH txns AS (
-      SELECT sp.user_id, CASE WHEN sp.rn = 1 THEN 'Subscriptions' ELSE 'Renewals' END AS type, sp.amount, sp.created_at
-      FROM (SELECT user_id, amount, created_at, ROW_NUMBER() OVER (PARTITION BY subscription_id ORDER BY created_at) rn
-            FROM subscription_payments WHERE status = 'succeeded') sp
+      SELECT sp.user_id, CASE WHEN sp.rn = 1 THEN 'Subscriptions' ELSE 'Renewals' END AS type, sp.amount, sp.created_at, sp.list_price
+      FROM (SELECT p.user_id, p.amount, p.created_at, p.subscription_id, plan.price::numeric AS list_price,
+                   ROW_NUMBER() OVER (PARTITION BY p.subscription_id ORDER BY p.created_at) rn
+            FROM subscription_payments p
+            LEFT JOIN user_subscriptions us ON us.id = p.subscription_id
+            LEFT JOIN subscription_plans plan ON plan.id = us.plan_id
+            WHERE p.status = 'succeeded') sp
       UNION ALL
       SELECT pu.user_id,
              CASE ots.service_type WHEN 'message' THEN 'Roses' WHEN 'super_like' THEN 'Super Likes'
-                  WHEN 'profile_boost' THEN 'Boosts' ELSE ots.name END AS type, pu.amount, pu.created_at
+                  WHEN 'profile_boost' THEN 'Boosts' ELSE ots.name END AS type, pu.amount, pu.created_at, NULL::numeric
       FROM purchases pu JOIN one_time_services ots ON ots.id = pu.service_id WHERE pu.payment_status = 'paid'
     )
     SELECT t.user_id AS id,
       NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), '') AS name, u.email,
       COUNT(*) AS txns, ROUND(SUM(t.amount)::numeric, 2) AS total, MAX(t.created_at) AS last_at,
-      STRING_AGG(DISTINCT t.type, ', ' ORDER BY t.type) AS types
+      STRING_AGG(DISTINCT t.type, ', ' ORDER BY t.type) AS types,
+      BOOL_OR(t.list_price IS NOT NULL AND t.amount < t.list_price) AS discounted,
+      ROUND(MAX(CASE WHEN t.list_price > 0 AND t.amount < t.list_price THEN 100 * (1 - t.amount / t.list_price) ELSE 0 END)::numeric) AS discount_pct,
+      ROUND(MAX(t.list_price)::numeric, 2) AS list_price
     FROM txns t JOIN users u ON u.id = t.user_id
     WHERE t.created_at >= ${p.start}::timestamptz AND t.created_at < ${p.endEx}::timestamptz
       AND (${type} = 'all' OR t.type = ${type})
@@ -501,6 +508,9 @@ export async function getBuyers(params: PeriodInput, typeIn: unknown) {
       txns: num(r.txns),
       total: num(r.total),
       types: r.types as string,
+      discounted: Boolean(r.discounted),
+      discountPct: num(r.discount_pct),
+      listPrice: r.list_price != null ? num(r.list_price) : null,
       lastAt: r.last_at ? String(r.last_at) : null,
     })),
   };

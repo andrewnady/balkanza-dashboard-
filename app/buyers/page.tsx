@@ -72,6 +72,7 @@ function BuyersContent() {
                       <th>Bought</th>
                       <th className="num">Transactions</th>
                       <th className="num">Total spent</th>
+                      <th>Discount</th>
                       <th>Last purchase</th>
                     </tr>
                   </thead>
@@ -87,6 +88,13 @@ function BuyersContent() {
                         <td className="muted">{u.types}</td>
                         <td className="num">{fmtInt(u.txns)}</td>
                         <td className="num" style={{ fontWeight: 700 }}>{fmtMoney(u.total)}</td>
+                        <td>
+                          {u.discounted
+                            ? <span className="badge warn" title={u.listPrice != null ? `List price ${fmtMoney(u.listPrice)}` : ""}>{u.discountPct ? `${u.discountPct}% off` : "discounted"}</span>
+                            : u.listPrice != null
+                              ? <span className="badge good">Full price</span>
+                              : <span className="muted">—</span>}
+                        </td>
                         <td className="muted" title={fmtWhen(u.lastAt)}>{fmtAgo(u.lastAt)}</td>
                       </tr>
                     ))}
