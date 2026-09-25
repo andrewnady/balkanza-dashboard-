@@ -633,12 +633,19 @@ export async function getMatches(params: PeriodInput, typeIn: unknown) {
     ),
     msg AS (
       SELECT LEAST(sender_id, receiver_id) AS a, GREATEST(sender_id, receiver_id) AS b,
-             COUNT(*) AS c, COUNT(DISTINCT sender_id) AS senders
+             COUNT(*) AS c, COUNT(DISTINCT sender_id) AS senders,
+             (ARRAY_AGG(sender_id ORDER BY created_at))[1] AS first_sender
       FROM messages WHERE message_type IN ('user','one_time_service') GROUP BY 1, 2
     )
-    SELECT m.a, m.b, m.matched_at, COALESCE(msg.c,0) AS msgs, COALESCE(msg.senders,0) AS senders,
-      NULLIF(TRIM(COALESCE(ua.first_name,'') || ' ' || COALESCE(ua.last_name,'')), '') AS a_name, ua.email AS a_email, ua.last_active_at AS a_active,
-      NULLIF(TRIM(COALESCE(ub.first_name,'') || ' ' || COALESCE(ub.last_name,'')), '') AS b_name, ub.email AS b_email, ub.last_active_at AS b_active
+    SELECT m.a, m.b, m.matched_at, COALESCE(msg.c,0) AS msgs, COALESCE(msg.senders,0) AS senders, msg.first_sender,
+      NULLIF(TRIM(COALESCE(ua.first_name,'') || ' ' || COALESCE(ua.last_name,'')), '') AS a_name, ua.email AS a_email, ua.last_active_at AS a_active, lower(pra.gender) AS a_gender,
+      NULLIF(TRIM(COALESCE(ub.first_name,'') || ' ' || COALESCE(ub.last_name,'')), '') AS b_name, ub.email AS b_email, ub.last_active_at AS b_active, lower(prb.gender) AS b_gender
+    FROM m
+    LEFT JOIN msg   ON msg.a = m.a AND msg.b = m.b
+    JOIN users ua   ON ua.id = m.a
+    JOIN users ub   ON ub.id = m.b
+    LEFT JOIN profiles pra ON pra.user_id = m.a
+    LEFT JOIN profiles prb ON prb.user_id = m.b
     FROM m
     LEFT JOIN msg   ON msg.a = m.a AND msg.b = m.b
     JOIN users ua   ON ua.id = m.a
@@ -654,11 +661,12 @@ export async function getMatches(params: PeriodInput, typeIn: unknown) {
     period: meta(p),
     type,
     rows: rows.map((r) => ({
-      a: { id: r.a as string, name: r.a_name as string | null, email: r.a_email as string | null, lastActive: r.a_active ? String(r.a_active) : null },
-      b: { id: r.b as string, name: r.b_name as string | null, email: r.b_email as string | null, lastActive: r.b_active ? String(r.b_active) : null },
+      a: { id: r.a as string, name: r.a_name as string | null, email: r.a_email as string | null, lastActive: r.a_active ? String(r.a_active) : null, gender: (r.a_gender as string | null) || null },
+      b: { id: r.b as string, name: r.b_name as string | null, email: r.b_email as string | null, lastActive: r.b_active ? String(r.b_active) : null, gender: (r.b_gender as string | null) || null },
       matchedAt: r.matched_at ? String(r.matched_at) : null,
       messages: num(r.msgs),
       senders: num(r.senders),
+      firstSender: (r.first_sender as string | null) || null,
       status: num(r.senders) === 2 ? "two-way" : num(r.senders) === 1 ? "one-sided" : "dead",
     })),
   };

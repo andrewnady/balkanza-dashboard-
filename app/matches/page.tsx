@@ -28,15 +28,18 @@ function fmtWhen(iso: string | null): string {
   return new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
 }
 
-function UserCell({ u }: { u: { id: string; name: string | null; email: string | null; lastActive: string | null } }) {
+const GENDER = (g: string | null): string => (g === "male" ? "♂" : g === "female" ? "♀" : "");
+
+function UserCell({ u, sentFirst, matchedAt }: { u: { id: string; name: string | null; email: string | null; lastActive: string | null; gender: string | null }; sentFirst: boolean; matchedAt: string | null }) {
+  const activeAfter = u.lastActive && matchedAt && new Date(u.lastActive) > new Date(matchedAt);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
       <a href={profileUrl(u.id)} target="_blank" rel="noreferrer" className="match-user">
-        <strong>{u.name || u.email || u.id}</strong> ↗
-        {u.name && u.email ? <span className="muted"> · {u.email}</span> : null}
+        <strong>{u.name || u.email || u.id}</strong>{GENDER(u.gender) ? <span className="muted"> {GENDER(u.gender)}</span> : null} ↗
+        {sentFirst ? <span className="badge good" style={{ marginLeft: 6 }}>✉ messaged first</span> : null}
       </a>
       <span className="muted" style={{ fontSize: 12 }} title={fmtWhen(u.lastActive)}>
-        active {fmtAgo(u.lastActive)}
+        active {fmtAgo(u.lastActive)}{activeAfter ? " · seen since match" : ""}
       </span>
     </div>
   );
@@ -58,6 +61,19 @@ function MatchesContent() {
     .filter(Boolean)
     .join("&");
   const hrefFor = (t: string) => `/matches?type=${t}${windowQs ? `&${windowQs}` : ""}`;
+
+  // Why are dead matches dead? Split into "both came back but nobody wrote"
+  // (a product/prompting problem) vs "someone never returned" (churn).
+  const seenSince = (u: any, matchedAt: string | null) => u.lastActive && matchedAt && new Date(u.lastActive) > new Date(matchedAt);
+  let deadInsight: { total: number; bothSeen: number; oneGone: number; bothGone: number } | null = null;
+  if (data && data.rows.length && type === "dead") {
+    let bothSeen = 0, oneGone = 0, bothGone = 0;
+    for (const r of data.rows) {
+      const a = seenSince(r.a, r.matchedAt), b = seenSince(r.b, r.matchedAt);
+      if (a && b) bothSeen++; else if (!a && !b) bothGone++; else oneGone++;
+    }
+    deadInsight = { total: data.rows.length, bothSeen, oneGone, bothGone };
+  }
 
   return (
     <>
@@ -110,6 +126,17 @@ function MatchesContent() {
             <div className="card"><p className="muted">No matches in this window.</p></div>
           ) : (
             <div className="card">
+              {deadInsight && (
+                <div className="callout info" style={{ marginBottom: 14 }}>
+                  <span className="callout-icon">🔍</span>
+                  <div>
+                    <strong>Why these are dead:</strong> of {deadInsight.total} dead matches,{" "}
+                    <strong>{deadInsight.bothSeen}</strong> had <strong>both people back on the app after matching</strong> yet no one wrote
+                    (a nudge / icebreaker problem), <strong>{deadInsight.oneGone}</strong> had one side never return, and{" "}
+                    <strong>{deadInsight.bothGone}</strong> had neither return (pure churn). &ldquo;seen since match&rdquo; is flagged under each name.
+                  </div>
+                </div>
+              )}
               <div className="tbl-scroll">
                 <table className="tbl">
                   <thead>
@@ -124,8 +151,8 @@ function MatchesContent() {
                   <tbody>
                     {data.rows.map((r: any, i: number) => (
                       <tr key={i}>
-                        <td><UserCell u={r.a} /></td>
-                        <td><UserCell u={r.b} /></td>
+                        <td><UserCell u={r.a} sentFirst={r.firstSender === r.a.id} matchedAt={r.matchedAt} /></td>
+                        <td><UserCell u={r.b} sentFirst={r.firstSender === r.b.id} matchedAt={r.matchedAt} /></td>
                         <td className="num">{fmtInt(r.messages)}</td>
                         <td>
                           <span className={`badge ${STATUS_BADGE[r.status] || "warn"}`}>{r.status}</span>
