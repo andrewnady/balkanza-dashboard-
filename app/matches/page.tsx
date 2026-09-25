@@ -2,7 +2,7 @@
 
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { useMetrics, fmtInt } from "../../components/ui/primitives";
+import { useMetrics, fmtInt, fmtAgo } from "../../components/ui/primitives";
 
 const PROFILE_URL = process.env.NEXT_PUBLIC_PROFILE_URL_TEMPLATE || "https://balkanza.com/profile/{id}";
 const profileUrl = (id: string) => PROFILE_URL.replace("{id}", encodeURIComponent(id));
@@ -28,12 +28,17 @@ function fmtWhen(iso: string | null): string {
   return new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
 }
 
-function UserCell({ u }: { u: { id: string; name: string | null; email: string | null } }) {
+function UserCell({ u }: { u: { id: string; name: string | null; email: string | null; lastActive: string | null } }) {
   return (
-    <a href={profileUrl(u.id)} target="_blank" rel="noreferrer" className="match-user">
-      <strong>{u.name || u.email || u.id}</strong> ↗
-      {u.name && u.email ? <span className="muted"> · {u.email}</span> : null}
-    </a>
+    <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+      <a href={profileUrl(u.id)} target="_blank" rel="noreferrer" className="match-user">
+        <strong>{u.name || u.email || u.id}</strong> ↗
+        {u.name && u.email ? <span className="muted"> · {u.email}</span> : null}
+      </a>
+      <span className="muted" style={{ fontSize: 12 }} title={fmtWhen(u.lastActive)}>
+        active {fmtAgo(u.lastActive)}
+      </span>
+    </div>
   );
 }
 

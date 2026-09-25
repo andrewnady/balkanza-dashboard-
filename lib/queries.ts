@@ -637,8 +637,8 @@ export async function getMatches(params: PeriodInput, typeIn: unknown) {
       FROM messages WHERE message_type IN ('user','one_time_service') GROUP BY 1, 2
     )
     SELECT m.a, m.b, m.matched_at, COALESCE(msg.c,0) AS msgs, COALESCE(msg.senders,0) AS senders,
-      NULLIF(TRIM(COALESCE(ua.first_name,'') || ' ' || COALESCE(ua.last_name,'')), '') AS a_name, ua.email AS a_email,
-      NULLIF(TRIM(COALESCE(ub.first_name,'') || ' ' || COALESCE(ub.last_name,'')), '') AS b_name, ub.email AS b_email
+      NULLIF(TRIM(COALESCE(ua.first_name,'') || ' ' || COALESCE(ua.last_name,'')), '') AS a_name, ua.email AS a_email, ua.last_active_at AS a_active,
+      NULLIF(TRIM(COALESCE(ub.first_name,'') || ' ' || COALESCE(ub.last_name,'')), '') AS b_name, ub.email AS b_email, ub.last_active_at AS b_active
     FROM m
     LEFT JOIN msg   ON msg.a = m.a AND msg.b = m.b
     JOIN users ua   ON ua.id = m.a
@@ -654,8 +654,8 @@ export async function getMatches(params: PeriodInput, typeIn: unknown) {
     period: meta(p),
     type,
     rows: rows.map((r) => ({
-      a: { id: r.a as string, name: r.a_name as string | null, email: r.a_email as string | null },
-      b: { id: r.b as string, name: r.b_name as string | null, email: r.b_email as string | null },
+      a: { id: r.a as string, name: r.a_name as string | null, email: r.a_email as string | null, lastActive: r.a_active ? String(r.a_active) : null },
+      b: { id: r.b as string, name: r.b_name as string | null, email: r.b_email as string | null, lastActive: r.b_active ? String(r.b_active) : null },
       matchedAt: r.matched_at ? String(r.matched_at) : null,
       messages: num(r.msgs),
       senders: num(r.senders),
