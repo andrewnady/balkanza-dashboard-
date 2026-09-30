@@ -27,6 +27,7 @@ export default function Overview({ onFetched }: { onFetched?: (t: string | null)
     key === "signups" ? `/users?type=signups&${qp}`
       : key === "active" ? `/users?type=active&${qp}`
       : key === "matches" ? `/matches?type=all&${qp}`
+      : key === "messages" ? `/users?type=senders&${qp}`
       : key === "posts" ? `/#kafana`
       : key === "revenue" || key === "subs" ? `/#monetization`
       : undefined;

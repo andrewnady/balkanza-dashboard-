@@ -15,6 +15,7 @@ const TITLES: Record<string, string> = {
   liked: "Sent a like",
   matched: "Got a match",
   messaged: "Sent a message",
+  senders: "Users who sent messages",
 };
 
 function fmtWhen(iso: string | null): string {
@@ -60,7 +61,7 @@ function UsersContent() {
                     {fmtInt(data.rows.length)}
                     {data.rows.length === 500 ? " (first 500)" : ""} user{data.rows.length === 1 ? "" : "s"} ·{" "}
                     {type === "online" ? <strong>live · active in the last 5 minutes</strong> : <>window: <strong>{data.period.label}</strong></>} ·{" "}
-                    {type === "active" || type === "online" ? "sorted by last active" : "sorted by signup time"} · click a name to open the profile.
+                    {type === "active" || type === "online" || type === "senders" ? "sorted by last active" : "sorted by signup time"} · click a name to open the profile.
                   </>
                 ) : (
                   "Loading…"

@@ -282,7 +282,7 @@ export async function getEngagement(params: PeriodInput) {
 export async function getUsers(params: PeriodInput, typeIn: unknown) {
   // Broad allow-list so any section's preset window (incl. 14/28) passes through.
   const p = resolvePeriod(params, [1, 7, 14, 28, 30, 90], 30);
-  const allowed = ["signups", "active", "online", "completed", "liked", "matched", "messaged"];
+  const allowed = ["signups", "active", "online", "completed", "liked", "matched", "messaged", "senders"];
   const type = allowed.includes(String(typeIn)) ? String(typeIn) : "signups";
 
   // 'online' = active in the last 5 min (live, not window-scoped); 'active' =
@@ -303,7 +303,10 @@ export async function getUsers(params: PeriodInput, typeIn: unknown) {
              EXISTS (SELECT 1 FROM likes l    WHERE l.liker_id    = u.id AND l.created_at >= ${p.start}::timestamptz AND l.created_at < ${p.endEx}::timestamptz)
           OR EXISTS (SELECT 1 FROM dislikes d WHERE d.disliker_id = u.id AND d.created_at >= ${p.start}::timestamptz AND d.created_at < ${p.endEx}::timestamptz)
           OR EXISTS (SELECT 1 FROM messages m WHERE m.sender_id   = u.id AND m.created_at >= ${p.start}::timestamptz AND m.created_at < ${p.endEx}::timestamptz)))
-        OR (${type} NOT IN ('active', 'online')
+        OR (${type} = 'senders'
+          AND EXISTS (SELECT 1 FROM messages m WHERE m.sender_id = u.id AND m.message_type IN ('user','one_time_service')
+                        AND m.created_at >= ${p.start}::timestamptz AND m.created_at < ${p.endEx}::timestamptz))
+        OR (${type} NOT IN ('active', 'online', 'senders')
           AND u.created_at >= ${p.start}::timestamptz AND u.created_at < ${p.endEx}::timestamptz
           AND (${type} <> 'completed' OR EXISTS (SELECT 1 FROM profiles pr WHERE pr.user_id = u.id AND pr.is_complete))
           AND (${type} <> 'liked'     OR EXISTS (SELECT 1 FROM likes l WHERE l.liker_id = u.id))
@@ -311,7 +314,7 @@ export async function getUsers(params: PeriodInput, typeIn: unknown) {
           AND (${type} <> 'messaged'  OR EXISTS (SELECT 1 FROM messages m WHERE m.sender_id = u.id AND m.message_type = 'user'))
         )
       )
-    ORDER BY (CASE WHEN ${type} IN ('active', 'online') THEN u.last_active_at ELSE u.created_at END) DESC NULLS LAST
+    ORDER BY (CASE WHEN ${type} IN ('active', 'online', 'senders') THEN u.last_active_at ELSE u.created_at END) DESC NULLS LAST
     LIMIT 500`;
 
   return {
