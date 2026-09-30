@@ -61,7 +61,7 @@ function UsersContent() {
                     {fmtInt(data.rows.length)}
                     {data.rows.length === 500 ? " (first 500)" : ""} user{data.rows.length === 1 ? "" : "s"} ·{" "}
                     {type === "online" ? <strong>live · active in the last 5 minutes</strong> : <>window: <strong>{data.period.label}</strong></>} ·{" "}
-                    {type === "active" || type === "online" || type === "senders" ? "sorted by last active" : "sorted by signup time"} · click a name to open the profile.
+                    {type === "senders" ? "sorted by messages sent" : type === "active" || type === "online" ? "sorted by last active" : "sorted by signup time"} · click a name to open the profile.
                   </>
                 ) : (
                   "Loading…"
@@ -83,6 +83,7 @@ function UsersContent() {
                   <thead>
                     <tr>
                       <th>User</th>
+                      {type === "senders" ? <th className="num">Messages</th> : null}
                       <th>Profile</th>
                       <th>Verification</th>
                       <th>Source</th>
@@ -99,6 +100,7 @@ function UsersContent() {
                             {u.name && u.email ? <span className="muted"> · {u.email}</span> : null}
                           </a>
                         </td>
+                        {type === "senders" ? <td className="num" style={{ fontWeight: 700 }}>{fmtInt(u.messages)}</td> : null}
                         <td>
                           <span className={`badge ${u.complete ? "good" : "warn"}`}>{u.complete ? "complete" : "incomplete"}</span>
                         </td>

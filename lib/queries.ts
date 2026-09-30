@@ -293,7 +293,11 @@ export async function getUsers(params: PeriodInput, typeIn: unknown) {
       NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), '') AS name,
       u.email, u.created_at, u.last_active_at,
       u.verification_status AS verification, COALESCE(u.register_source::text, 'unknown') AS source,
-      EXISTS (SELECT 1 FROM profiles pr WHERE pr.user_id = u.id AND pr.is_complete) AS complete
+      EXISTS (SELECT 1 FROM profiles pr WHERE pr.user_id = u.id AND pr.is_complete) AS complete,
+      CASE WHEN ${type} = 'senders' THEN
+        (SELECT COUNT(*) FROM messages m WHERE m.sender_id = u.id AND m.message_type IN ('user','one_time_service')
+           AND m.created_at >= ${p.start}::timestamptz AND m.created_at < ${p.endEx}::timestamptz)
+        ELSE 0 END AS msg_count
     FROM users u
     WHERE u.is_admin = false
       AND (
@@ -314,7 +318,7 @@ export async function getUsers(params: PeriodInput, typeIn: unknown) {
           AND (${type} <> 'messaged'  OR EXISTS (SELECT 1 FROM messages m WHERE m.sender_id = u.id AND m.message_type = 'user'))
         )
       )
-    ORDER BY (CASE WHEN ${type} IN ('active', 'online', 'senders') THEN u.last_active_at ELSE u.created_at END) DESC NULLS LAST
+    ORDER BY msg_count DESC, (CASE WHEN ${type} IN ('active', 'online', 'senders') THEN u.last_active_at ELSE u.created_at END) DESC NULLS LAST
     LIMIT 500`;
 
   return {
@@ -329,6 +333,7 @@ export async function getUsers(params: PeriodInput, typeIn: unknown) {
       verification: (r.verification as string) || "unverified",
       source: r.source as string,
       complete: r.complete as boolean,
+      messages: num(r.msg_count),
     })),
   };
 }
