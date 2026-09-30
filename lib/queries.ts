@@ -21,7 +21,7 @@ const meta = (p: Period) => ({ mode: p.mode, days: p.days, label: p.label, prevL
 export async function getOverview(params: PeriodInput) {
   const p = resolvePeriod(params, [1, 7, 30, 90], 30);
 
-  const [signups, active, revenue, matches, subs, posts, online] = await Promise.all([
+  const [signups, active, revenue, matches, subs, posts, messages, online] = await Promise.all([
     sql`SELECT
           COUNT(*) FILTER (WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz)         AS cur,
           COUNT(*) FILTER (WHERE created_at >= ${p.prevStart}::timestamptz AND created_at < ${p.prevEndEx}::timestamptz) AS prev
@@ -71,6 +71,11 @@ export async function getOverview(params: PeriodInput) {
           COUNT(*) FILTER (WHERE created_at >= ${p.prevStart}::timestamptz AND created_at < ${p.prevEndEx}::timestamptz) AS prev,
           COUNT(DISTINCT author_id) FILTER (WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz) AS authors_cur
         FROM kafana_posts`,
+    // Messages sent by users (chat + roses, excluding AI/system messages), window-scoped.
+    sql`SELECT
+          COUNT(*) FILTER (WHERE created_at >= ${p.start}::timestamptz AND created_at < ${p.endEx}::timestamptz)         AS cur,
+          COUNT(*) FILTER (WHERE created_at >= ${p.prevStart}::timestamptz AND created_at < ${p.prevEndEx}::timestamptz) AS prev
+        FROM messages WHERE message_type IN ('user','one_time_service')`,
     // Live "online now" — active in the last 5 minutes. Not window-scoped.
     sql`SELECT COUNT(*) AS n FROM users
         WHERE is_admin = false AND is_disabled = false AND last_active_at >= NOW() - INTERVAL '5 minutes'`,
@@ -86,6 +91,7 @@ export async function getOverview(params: PeriodInput) {
       { key: "signups", label: "New sign-ups", value: num(signups[0].cur), prev: pv(num(signups[0].prev)), format: "int" },
       { key: "active", label: "Active users", value: num(active[0].cur), prev: pv(num(active[0].prev)), format: "int" },
       { key: "matches", label: "New matches", value: num(matches[0].cur), prev: pv(num(matches[0].prev)), format: "int" },
+      { key: "messages", label: "Messages sent", value: num(messages[0].cur), prev: pv(num(messages[0].prev)), sub: "user messages + roses", format: "int" },
       { key: "revenue", label: "Revenue (all sources)", value: num(revenue[0].cur), prev: pv(num(revenue[0].prev)), format: "money" },
       { key: "subs", label: "New premium subs", value: num(subs[0].cur), prev: pv(num(subs[0].prev)), sub: "first paid subscription", format: "int" },
       { key: "posts", label: "New posts", value: num(po.cur), prev: pv(num(po.prev)), sub: `${num(po.authors_cur)} posters · Kafana`, format: "int" },

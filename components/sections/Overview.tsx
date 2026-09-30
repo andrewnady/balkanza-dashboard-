@@ -47,13 +47,13 @@ export default function Overview({ onFetched }: { onFetched?: (t: string | null)
       {error ? (
         <ErrorNote msg={error} />
       ) : loading || !data ? (
-        <div className="grid grid-6">
-          {Array.from({ length: 6 }).map((_, i) => (
+        <div className="grid grid-7">
+          {Array.from({ length: 7 }).map((_, i) => (
             <CardSkeleton key={i} height={110} />
           ))}
         </div>
       ) : (
-        <div className="grid grid-6">
+        <div className="grid grid-7">
           {data.tiles.map((t: any) => (
             <StatTile
               key={t.key}
